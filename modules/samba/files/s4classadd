@@ -1,0 +1,131 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <class_name> [-b base_class] [-d display_name]"
+    exit 0
+}
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hb:d:" opt; do
+        case $opt in
+            b)
+                baseClass=$OPTARG
+                ;;
+            d)
+                classDisplayName=$OPTARG
+                ;;
+            h)
+                usage
+                ;;
+            \?)
+                echo "option -$OPTARG not recognized !"
+                usage
+                ;;
+            :)
+                echo "parameter of -$OPTARG not specified !"
+                exit 0
+                ;;
+        esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi;
+
+#################
+# analyse args
+#################
+
+# one arg, the class #
+if [ $# != 1 ]; then
+    usage
+fi
+
+className=$1
+classGroup=${1,,}
+
+# check the base class #
+if [ -z "$baseClass" ]; then
+   baseClassName=${baseUserDN#OU=}
+   baseClassGroup=${baseUserGroup}
+else
+   baseClassName=${baseClass}
+   baseClassGroup=${baseClass,,}
+fi
+
+# check display name #
+if [ -z "$classDisplayName" ]; then
+   classDisplayName=$className
+fi
+
+###################
+# create the class
+###################
+
+# check if the class already exist #
+if wbinfo --group-info=$classGroup > /dev/null 2>&1; then
+   echo "The class $classGroupName already exist !"
+   exit 0
+fi
+
+# search for the base class #
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$baseClassGroup)" | grep "dn: CN=$baseClassGroup,OU=$baseClassName")
+if [ -z "$searchClass" ]; then
+   echo "The base class $baseClassName cannot be found !"
+   exit 0
+else
+   baseClassDN=${searchClass#dn: CN=$baseClassGroup,}
+   baseClassDN=${baseClassDN%$baseUserDN,$baseDN}
+fi
+
+
+# create the organizational unit #
+echo "create $className organizational units."
+echo "dn: OU=${className},${baseClassDN}${baseUserDN},${baseDN}
+changetype: add
+objectClass: top
+objectClass: organizationalunit
+
+dn: OU=${className},${baseClassDN}${baseShareDN},${baseDN}
+changetype: add
+objectClass: top
+objectClass: organizationalunit" > /tmp/$className
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$className
+rm /tmp/$className
+
+
+# create the groups #
+s4groupadd $classGroup -d OU=${className},${baseClassDN}${baseUserDN}
+
+echo "dn: CN=$classGroup,OU=${className},${baseClassDN}${baseUserDN},${baseDN}
+changetype: modify
+add: displayName
+displayName: $classDisplayName" > /tmp/$className
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$className
+rm /tmp/$className
+

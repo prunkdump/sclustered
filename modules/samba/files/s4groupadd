@@ -1,0 +1,118 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <group_name> [-d group_DN]"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hd:" opt; do
+	case $opt in
+	    d)
+		groupDN=$OPTARG
+		;;
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi;
+
+
+#################
+# analyse args
+#################
+
+# one arg, the group #
+if [ $# != 1 ]; then
+    usage
+fi
+
+groupName=$1
+
+# check if the group already exit #
+if wbinfo --group-info $groupName > /dev/null 2>&1; then
+   echo "The group already exist !"
+   exit 0
+fi
+
+
+# default group DN #
+if [ -z "$groupDN" ]; then
+    groupDN="CN=Users"
+else
+    groupDNSet="Yes"
+fi
+
+
+################################
+# get group rfc2307 attributes #
+################################
+
+# get the new gid #
+groupGid=$(s4ldbsearch -H $samDatabase -s base -b CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN msSFU30MaxGidNumber | grep 'msSFU30MaxGidNumber:')
+if [ -z "$groupGid" ]; then
+   groupGid="$baseGid"
+else
+   groupGid=$(echo $groupGid | sed 's/^msSFU30MaxGidNumber: \(.*\)/\1/')
+fi
+
+#################
+#create the group
+#################
+
+if [ -z "$groupDNSet" ]; then
+   samba-tool group add $groupName --gid-number=$groupGid --nis-domain=${shortDomain,,}
+else
+   samba-tool group add $groupName --groupou=$groupDN --gid-number=$groupGid --nis-domain=${shortDomain,,}
+fi
+
+############
+# next gid #
+############
+nextGid=$((groupGid+1))
+
+echo "dn: CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN
+changetype: modify
+replace: msSFU30MaxGidNumber
+msSFU30MaxGidNumber: $nextGid" > /tmp/$groupName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$groupName
+rm /tmp/$groupName
+
+echo "Group $groupName created !"

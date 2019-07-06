@@ -1,0 +1,57 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <class_name>"
+    exit 0
+}
+
+
+#################
+# analyse args
+#################
+
+# one arg, the class #
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+newStudentClassName=$1
+newStudentClassGroup=${1,,}
+
+########################
+# create student class #
+########################
+
+# get class names #
+usersClassName=${baseUserDN#OU=}
+teachersClassName=${baseTeacherDN#OU=}
+teachersClassName=${teachersClassName%,OU=$usersClassName}
+studentsClassName=${baseStudentDN#OU=}
+studentsClassName=${studentsClassName%,OU=$usersClassName}
+teachersGroupName=${teachersClassName,,}
+studentsGroupName=${studentsClassName,,}
+
+# create the class #
+s4classadd $newStudentClassName -b $studentsClassName
+
+#####################
+# create the shares #
+#####################
+
+# create resource share
+s4shareadd ${resourceDirName,,} 1750,g:$teachersGroupName:rwx $newStudentClassName -c $newStudentClassName,$teachersClassName -n $resourceDirName
+
+#create shared share
+s4shareadd ${sharedDirName,,} 1770,g:$teachersGroupName:rwx,d:g:$teachersGroupName:rwx $newStudentClassName -c $newStudentClassName,$teachersClassName -n $sharedDirName
+
+#create test folder
+s4shareadd ${testDirName,,} 770,g:$teachersGroupName:rwx,d:g::---,d:g:$newStudentClassGroup:---,d:o::---,d:g:$teachersGroupName:r-- $newStudentClassName -c $newStudentClassName,$teachersClassName -n $testDirName
+
+

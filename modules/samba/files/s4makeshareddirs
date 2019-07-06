@@ -1,0 +1,464 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 [-b baseClass] [-f] [-d]"
+    echo "-b : update only dirs belonging to baseClass"
+    echo "-f : force updating share permissions"
+    echo "-d : delete unused dirs, asking for confirmation"
+    exit 0
+}
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hb:fd" opt; do
+        case $opt in
+            b)
+                baseClass=$OPTARG
+                ;;
+            f)
+                forceUpdate="yes"
+                ;;
+            d)
+                deleteDirs="yes"
+                ;;
+            h)
+                usage
+                ;;
+            \?)
+                echo "option -$OPTARG not recognized !"
+                usage
+                ;;
+            :)
+                echo "parameter of -$OPTARG not specified !"
+                exit 0
+                ;;
+        esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# no args #
+if [ $# -ne 0 ]; then
+    usage
+fi
+
+# check the delete option #
+if [ -n "$baseClass" ] && [ -n "$deleteDirs" ]; then
+   echo "The -b and -d options can't be used together"
+   exit 0
+fi
+
+# check the base class #
+if [ -z "$baseClass" ]; then
+   baseClassName=${baseUserDN#OU=}
+   baseClassGroup=${baseUserGroup}
+else
+   baseClassName=$baseClass
+   baseClassGroup=${baseClass,,}
+fi
+
+# search the class #
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$baseClassGroup)" | grep "dn: CN=$baseClassGroup,OU=$baseClassName")
+if [ -z "$searchClass" ]; then
+   echo "The class $baseClassName cannot be found !"
+   exit 0
+else
+   baseClassDN=${searchClass#dn: CN=$baseClassGroup,}
+   baseClassDN=${baseClassDN%$baseUserDN,$baseDN}
+fi
+
+
+# set the searching DN #
+baseClassUserDN="${baseClassDN}${baseUserDN},${baseDN}"
+baseClassShareDN="${baseClassDN}${baseShareDN},${baseDN}"
+serverHostname=$(hostname)
+
+
+# create the reference timestamp #
+touch /tmp/s4makeshareddirs_base_timestamp
+
+function touchDir {
+   if [ -e "$1" ]; then
+      touch "$1"
+      if [ "$forceUpdate" == "yes" ]; then
+         return 1
+      else
+         return 0
+      fi
+   else
+      mkdir -p "$1"
+      return 1
+   fi
+}
+
+####################
+# create user dirs #
+####################
+
+# deleted later #
+oldHomeDirs=""
+
+userRecordFound="no"
+
+while read searchLine; do
+
+   # check if record start #
+   if echo "$searchLine" | grep -q '^# record '; then
+      userRecordFound="yes"
+   fi
+
+   # read dn #
+   if echo "$searchLine" | grep -q '^dn: '; then
+      userDN=${searchLine#dn: }
+   fi
+
+   # read cn #
+   if echo "$searchLine" | grep -q '^cn: '; then
+      userName=${searchLine#cn: }
+   fi
+
+   # read unixHomeDirectory #
+   if echo "$searchLine" | grep -q '^unixHomeDirectory: '; then
+      userHomeDirectory=${searchLine#unixHomeDirectory: }
+   fi
+
+   # check if record end #
+   if [ -z "$searchLine" ]; then
+      if [ "$userRecordFound" == "yes" ]; then
+
+         # get user class #
+         userClassName=${userDN#CN=$userName,OU=}
+         userClassName=$(echo "$userClassName" | cut -d, -f1)
+         userClassGroup=${userClassName,,}
+
+         # get user server #
+         userServer=${userHomeDirectory#/dnfs/$homeShare/}
+         userServer=${userServer%/$userName}
+
+         ####################
+         # create user dirs #
+         ####################
+
+         # make class directory #
+         touchDir /srv/nfs4/$shareShare/$userClassGroup
+         touchDir $dfsPath/$userClassGroup
+
+         # if user on current server create user directory #
+         if [ "$userServer" == "$serverHostname" ]; then
+
+            #############################
+            # check some specials cases #
+            #############################
+            if [ -e "$unixHomePath/$userName" ]; then
+
+               # check if the uid is correct #
+               currentUserUid=$(id -u $userName)
+               currentDirUid=$(stat -c "%u" $unixHomePath/$userName)
+               if [ "$currentUserUid" -ne "$currentDirUid" ]; then
+
+                  # bad uid ! this must be an old user dir, delete or restore #
+                  oldHomeDirs="${oldHomeDirs} $unixHomePath/$userName"
+                  chown $userName:$userClassGroup $unixHomePath/$userName
+                  setfacl -b $unixHomePath/$userName
+                  setfacl -k $unixHomePath/$userName
+
+               else
+                  # check if the gid is correct #
+                  currentUserGid=$(id -g $userName)
+                  currentDirGid=$(stat -c "%g" $unixHomePath/$userName)
+                  if [ "$currentUserGid" -ne "$currentDirGid" ]; then
+
+                     # bad gid ! may the user's class have changed #
+                     echo "Seems the ${userName}'s class have changed, restoring rights ..."
+                     chown -R $userName:$userClassGroup $unixHomePath/$userName
+                     setfacl -R -b $unixHomePath/$userName
+                     setfacl -R -k $unixHomePath/$userName
+                  fi
+               fi
+            fi
+
+            # create dirs #
+            if ! touchDir $unixHomePath/$userName; then
+               chown $userName:$userClassGroup $unixHomePath/$userName
+               chmod 700 $unixHomePath/$userName
+               setfacl -b $unixHomePath/$userName
+               setfacl -k $unixHomePath/$userName
+            fi
+         fi
+      fi
+      userRecordFound="no"
+   fi
+
+done < <(s4ldbsearch -H $samDatabase -b $baseClassUserDN '(objectClass=user)'  dn cn unixHomeDirectory)
+
+
+######################
+# create shares dirs #
+######################
+shareRecordFound="no"
+
+while read searchLine; do
+
+   # check if record start #
+   if echo "$searchLine" | grep -q '^# record '; then
+      shareRecordFound="yes"
+      shareShowClasses=""
+   fi
+
+   # read dn #
+   if echo "$searchLine" | grep -q '^dn: '; then
+      shareDN=${searchLine#dn: }
+   fi
+
+   # read cn #
+   if echo "$searchLine" | grep -q '^cn: '; then
+      shareName=${searchLine#cn: }
+   fi
+
+   # get share class display name #
+   if echo "$searchLine" | grep -q '^gidNumber: '; then
+
+      # get the DN of the class group #
+      shareClassGroupDN=${shareDN#CN=$shareName,}
+      shareClassName=$(echo $shareClassGroupDN | cut -d, -f1)
+      shareClassName=${shareClassName#OU=}
+      shareClassGroup=${shareClassName,,}
+      shareClassGroupDN=$(echo "$shareClassGroupDN" | sed "s/$baseShareDN,$baseDN/$baseUserDN,$baseDN/")
+      shareClassDisplayName=$(s4ldbsearch -H $samDatabase -b $shareClassGroupDN "(cn=$shareClassGroup)" displayName | grep 'displayName: ')
+      shareClassDisplayName=${shareClassDisplayName#displayName: }
+   fi
+
+   # read givenName containing show name #
+   if echo "$searchLine" | grep -q '^givenName: '; then
+      shareShowName=${searchLine#givenName: }
+   fi
+
+   # read description containing rights #
+   if echo "$searchLine" | grep -q '^description: '; then
+      shareRights=${searchLine#description: }
+      shareOwner=$(echo "$shareRights" | cut -d, -f1)
+      shareMod=$(echo "$shareRights" | cut -d, -f2)
+      shareAcls=$(echo "$shareRights" | cut -d, -f3-)
+   fi
+
+   # read unixHomeDirectory containing server #
+   if echo "$searchLine" | grep -q '^unixHomeDirectory: '; then
+      shareServer=${searchLine#unixHomeDirectory: }
+   fi
+
+   # read show classes stored in memeberOf #
+   if echo "$searchLine" | grep -q '^memberOf: '; then
+      showClass=${searchLine#memberOf: CN=}
+      showClass=$(echo "$showClass" | cut -d, -f1)
+      shareShowClasses="$shareShowClasses ${showClass}"
+   fi
+
+   # check if record end #
+   if [ -z "$searchLine" ]; then
+      if [ "$shareRecordFound" == "yes" ]; then
+
+         ############################
+         # create share directories #
+         ############################
+         if [ "$shareServer" == "$serverHostname" ]; then
+
+            # share directory #
+            if ! touchDir $unixSharePath/$shareName; then
+               chown $shareOwner $unixSharePath/$shareName
+               chmod $shareMod $unixSharePath/$shareName
+               setfacl -b $unixSharePath/$shareName
+               setfacl -k $unixSharePath/$shareName
+               if [ ! -z "$shareAcls" ]; then
+                  setfacl -m $shareAcls $unixSharePath/$shareName
+               fi
+            fi
+         fi
+
+         ########################
+         # create nfs/dfs links #
+         ########################
+         rm -f /etc/exports.d/$shareName.exports
+         for showClass in $shareShowClasses; do
+
+            nfsDFSRoot="/srv/nfs4/$shareShare"
+            sambaDFSRoot="$dfsPath"
+
+            # make dirs #
+            touchDir $nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
+            touchDir $sambaDFSRoot/${showClass,,}/$shareClassDisplayName
+
+            # nfs share #
+            shareNfs=$(head /etc/exports.d/export.template)
+            shareNFSPath=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f1)
+            shareNFSParams=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f2)
+            shareNfs="$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName  $shareNFSParams"
+
+            systemdUnitName=$(echo "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName" | sed s,/,-,g )
+            systemdUnitName=${systemdUnitName#-}
+            systemdUnitName="${systemdUnitName}.mount"
+
+            if [ "$shareServer" == "$serverHostname" ]; then
+               mountTarget="$unixSharePath/$shareName"
+            else
+               mountTarget="$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
+               shareNfs=$(echo "$shareNfs" | sed s:\):,refer=/$shareShare/${showClass,,}/$shareClassDisplayName/$shareShowName@$shareServer\): )
+            fi
+            echo \
+"[Unit]
+
+[Mount]
+What=$unixSharePath/$shareName
+Where=$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target
+" > /lib/systemd/system/$systemdUnitName
+
+            systemctl enable $systemdUnitName
+            systemctl start $systemdUnitName
+            echo "$shareNfs" >> /etc/exports.d/$shareName.exports
+
+            # dfs share #
+            ln -f -s msdfs:$shareServer\\$shareShare\\$shareName $sambaDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
+         done
+      fi
+      shareRecordFound="no"
+   fi
+
+done < <(s4ldbsearch -H $samDatabase -b $baseClassShareDN '(objectClass=user)'  dn cn gidNumber givenName description unixHomeDirectory memberOf)
+
+# reload nfs #
+exportfs -ra
+
+###################
+# clean if needed #
+###################
+
+# old user dirs #
+if [ -n "$oldHomeDirs" ]; then
+   for oldHomeDir in $oldHomeDirs; do
+      changedUserName=$(basename $oldHomeDir)
+      changedUserUid=$(stat -c "%u" $oldHomeDir)
+      changedUserGid=$(stat -c "%g" $oldHomeDir)
+      echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+      echo "$oldHomeDir seems to be an old home dir."
+      echo "But a new user with the same name now exist."
+      if [ $(ask_yes_or_no "Would you like to delete the old files ? if not they will be given to the new user.") == "yes" ]; then
+         rm -r $oldHomeDir
+         mkdir -p $oldHomeDir
+         chown $changedUserUid:$changedUserGid $oldHomeDir
+         chmod 700 $oldHomeDir
+      else
+         chown -R $changedUserUid:$changedUserGid $oldHomeDir
+         chmod 700 $oldHomeDir
+         setfacl -R -b $oldHomeDir
+         setfacl -R -k $oldHomeDir
+      fi
+      echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+   done
+fi
+
+
+# the others #
+if [ "$deleteDirs" == "yes" ]; then
+
+   # clean homes dirs #
+   badHomeDirs=""
+   for homePath in $unixHomePath/*; do
+      if [ "$homePath" -ot "/tmp/s4makeshareddirs_base_timestamp" ]; then
+         badHomeDirs="${badHomeDirs} ${homePath}"
+      fi
+   done
+
+   if [ -n "$badHomeDirs" ]; then
+      echo " "
+      echo "###############################################"
+      echo " The following home directories seems not used "
+      echo "###############################################"
+
+      for badHomeDir in $badHomeDirs; do
+         echo "$badHomeDir"
+      done
+
+      if [ $(ask_yes_or_no "Would you like to delete them ?") == "yes" ]; then
+         for badHomeDir in $badHomeDirs; do
+            rm -r $badHomeDir
+         done
+     fi
+   fi
+
+
+   # clean share dirs #
+   badShareDirs=""
+   for sharePath in $unixSharePath/*; do
+      if [ "$sharePath" -ot "/tmp/s4makeshareddirs_base_timestamp" ]; then
+         badShareDirs="${badShareDirs} ${sharePath}"
+      fi
+   done
+
+   if [ -n "$badShareDirs" ]; then
+      echo " "
+      echo "###############################################"
+      echo " The following share directories seems not used "
+      echo "###############################################"
+
+      for badShareDir in $badShareDirs; do
+         echo "$badShareDir"
+      done
+
+      if [ $(ask_yes_or_no "Would you like to delete them ?") == "yes" ]; then
+         for badShareDir in $badShareDirs; do
+            rm -r $badShareDir
+         done
+     fi
+   fi
+
+
+   # clean profiles dirs #
+   #!!!!!!!!!!!!!!!!!!!!#
+
+fi
+
+
+
+

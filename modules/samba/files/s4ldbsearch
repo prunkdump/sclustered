@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# wrapper to ldbsearch that remove newlines #
+lineBuild=""
+IFS=''
+
+while read -r searchLine; do
+   if $(echo "$searchLine" | grep -q '^ '); then
+      lineBuild="${lineBuild}${searchLine# }"
+   else
+      echo "$lineBuild"
+      lineBuild=$searchLine
+   fi
+done < <(ldbsearch "$@")
+
+if ! $(echo "lineBuild" | grep -q '^ '); then
+   echo "$lineBuild"
+fi

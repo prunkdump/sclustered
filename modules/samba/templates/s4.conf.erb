@@ -1,0 +1,65 @@
+#####################
+# LDAP organization #
+#####################
+baseDN="<%= @base_dn %>"
+baseUserDN="OU=<%= @users_ou %>"
+baseShareDN="OU=<%= @shares_ou %>"
+baseStudentDN="OU=<%= @students_ou %>,OU=<%= @users_ou %>"
+baseTeacherDN="OU=<%= @teachers_ou %>,OU=<%= @users_ou %>"
+shortDomain="<%= @short_domain %>"
+baseUid="<%= @base_uid %>"
+baseGid="<%= @base_gid %>"
+
+######################
+# group organization #
+######################
+baseUserGroup="<%= @users_group %>"
+baseShareGroup="<%= @shares_group %>"
+baseStudentGroup="<%= @students_group %>"
+baseTeacherGroup="<%= @teachers_group %>"
+classSupervisorSuffix="<%= @class_supervisor_suffix %>"
+
+##########################
+# directory organization #
+##########################
+dfsPath="<%= @dfs_path %>"
+unixHomePath="<%= @home_path %>"
+homeShare="<%= @home_share %>"
+
+unixProfilePath="<%= @profile_path %>"
+profileShare="<%= @profile_share %>"
+
+unixSharePath="<%= @share_path %>"
+shareShare="<%= @share_share %>"
+
+baseStudentDir="<%= @students_dir %>"
+baseTeacherDir="<%= @teachers_dir %>"
+
+teachersDirName="<%= @teachers_common_dir %>"
+commonDirName="<%= @common_dir %>"
+resourceDirName="<%= @resource_dir %>"
+sharedDirName="<%= @shared_dir %>"
+testDirName="<%= @test_dir %>"
+
+homeDrive="<%= @home_drive %>"
+commonDrive="<%= @common_drive %>"
+
+######################
+# samba organization #
+###################### 
+#buggy accountServerDns="<%= @accountsrv_dns %>"
+accountServerDns="<%= @hostname %>"
+samDatabase="<%= @private_path %>/sam.ldb"
+minLoginLength="<%= @login_min_length %>"
+loginSurnameChar="<%= @login_surname_length %>"
+loginGivennameChar="<%= @login_givenname_length %>"
+
+#########
+# quota #
+#########
+quotaPartition="<%= @quota_mount_point %>"
+quotaStudentSoft="<%= @quota_student_soft %>"
+quotaStudentHard="<%= @quota_student_hard %>"
+quotaTeacherSoft="<%= @quota_teacher_soft %>"
+quotaTeacherHard="<%= @quota_teacher_hard %>"
+

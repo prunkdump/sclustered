@@ -1,0 +1,93 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <student_name> <student_class> [-s server] [-p passwd]"
+    exit 0
+}
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hs:p:" opt; do
+        case $opt in
+            s)
+                userServer=$OPTARG
+                ;;
+            p)
+                userPasswd=$OPTARG
+                ;;
+            h)
+                usage
+                ;;
+            \?)
+                echo "option -$OPTARG not recognized !"
+                usage
+                ;;
+            :)
+                echo "parameter of -$OPTARG not specified !"
+                exit 0
+                ;;
+        esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# two args, the student name and class #
+if [ $# -ne 2 ]; then
+    usage
+fi
+
+newStudentName=$1
+newStudentClass=$2
+newStudentOptions=""
+
+# check if the class exist #
+newStudentClassGroup=${newStudentClass,,}
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$newStudentClassGroup)" | grep "dn: CN=$newStudentClassGroup,OU=$newStudentClass,$baseStudentDN")
+if [ -z "$searchClass" ]; then
+   echo "The student class $newStudentClass cannot be found !"
+   exit 0
+fi
+
+# parse options #
+if [ ! -z "$userServer" ]; then
+   newStudentOptions="$newStudentOptions -s $userServer"
+fi
+
+if [ ! -z "$userPasswd" ]; then
+   newStudentOptions="$newStudentOptions -p $userPasswd"
+fi
+
+######################
+# create the Student #
+######################
+
+s4useradd $newStudentName $newStudentClass $newStudentOptions

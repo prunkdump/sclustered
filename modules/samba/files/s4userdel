@@ -1,0 +1,79 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <user_name>"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":h" opt; do
+	case $opt in
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# just one arg #
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+# parse username #
+userName=$1
+
+# check if the user already exist #
+if ! wbinfo -i $userName > /dev/null 2>&1; then
+   echo "The user $userName does not exist !"
+   exit 0
+fi
+
+###################
+# delete the user #
+###################
+
+# delete only in AD #
+# user's files are deleted later #
+echo "Deleting user $userName"
+samba-tool user delete $userName

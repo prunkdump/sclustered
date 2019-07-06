@@ -1,0 +1,87 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <teacher_name> [-s server] [-p passwd]"
+    exit 0
+}
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hs:p:" opt; do
+        case $opt in
+            s)
+                userServer=$OPTARG
+                ;;
+            p)
+                userPasswd=$OPTARG
+                ;;
+            h)
+                usage
+                ;;
+            \?)
+                echo "option -$OPTARG not recognized !"
+                usage
+                ;;
+            :)
+                echo "parameter of -$OPTARG not specified !"
+                exit 0
+                ;;
+        esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# one arg, the teacher name #
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+newTeacherName=$1
+newTeacherOptions=""
+
+if [ ! -z "$userServer" ]; then
+   newTeacherOptions="$newTeacherOptions -s $userServer"
+fi
+if [ ! -z "$userPasswd" ]; then
+   newTeacherOptions="$newTeacherOptions -p $userPasswd"
+fi
+
+######################
+# create the teacher #
+######################
+
+# get class names #
+usersClassName=${baseUserDN#OU=}
+teachersClassName=${baseTeacherDN#OU=}
+teachersClassName=${teachersClassName%,OU=$usersClassName}
+
+s4useradd $newTeacherName $teachersClassName $newTeacherOptions

@@ -1,0 +1,204 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <user_name> [user_class] [-s server] [-p passwd]"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hs:p:" opt; do
+	case $opt in
+	    s)
+		userServer=$OPTARG
+		;;
+	    p)
+		userPasswd=$OPTARG
+		;;
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# max two args #
+if [ $# -gt 2 ] || [ $# -eq 0 ]; then
+    usage
+fi
+
+# parse username #
+userName=$1
+if [ ${#userName} -lt $minLoginLength ]; then
+    echo "User name need to be at least $minLoginLength caracters length !"
+    exit 0
+fi
+
+# check if the user already exist #
+if wbinfo -i $userName > /dev/null 2>&1; then
+   echo "The user already exist !"
+   exit 0
+fi
+
+
+# check the base class #
+if [ -z "$2" ]; then
+   userClassName=${baseUserDN#OU=}
+   userClassGroup=${baseUserGroup}
+else
+   userClassName=$2
+   userClassGroup=${2,,}
+fi
+
+
+# search the class #
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userClassGroup)" | grep "dn: CN=$userClassGroup,OU=$userClassName")
+if [ -z "$searchClass" ]; then
+   echo "The class $userClassName cannot be found !"
+   exit 0
+else
+   userClassDN=${searchClass#dn: CN=$userClassGroup,}
+   userClassDN=${userClassDN%,$baseDN}
+fi
+
+
+# check the server #
+if [ -z "$userServer" ]; then
+   userServer=$(hostname)
+fi
+
+
+# check the password #
+if [ -z "$userPasswd" ]; then
+   userPasswd=$userName
+fi
+
+
+
+###############################
+# get user rfc2307 attributes #
+###############################
+
+# get the new uid #
+userUid=$(s4ldbsearch -H $samDatabase -s base -b CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN msSFU30MaxUidNumber | grep 'msSFU30MaxUidNumber:')
+if [ -z "$userUid" ]; then
+   userUid="$baseUid"
+else
+   userUid=$(echo $userUid | sed 's/^msSFU30MaxUidNumber: \(.*\)/\1/')
+fi
+
+# get the gid #
+strgid=$(wbinfo --group-info="$userClassGroup")
+userGid=$(echo $strgid | cut -d ":" -f 3)
+
+
+#################
+#create the user
+#################
+echo "Creating s4 posix user $userName"
+
+# create the user #
+samba-tool user create $userName --userou=$userClassDN --random-password \
+--profile-path="\\\\${userServer}\\${profileShare}\\${userName}" \
+--home-directory="\\\\${userServer}\\${homeShare}\\${userName}" \
+--home-drive="$homeDrive" \
+--nis-domain=${shortDomain,,} \
+--unix-home="/dnfs/${homeShare}/${userServer}/$userName" \
+--uid-number="$userUid" \
+--gid-number="$userGid" \
+--login-shell="/bin/bash"
+
+
+# set passwd #
+samba-tool user setpassword $userName --newpassword=$userPasswd
+samba-tool user setexpiry --noexpiry $userName
+
+############
+# next uid #
+############
+nextUid=$((userUid+1))
+
+echo "dn: CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN
+changetype: modify
+replace: msSFU30MaxUidNumber
+msSFU30MaxUidNumber: $nextUid" > /tmp/$userName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+rm /tmp/$userName
+
+
+######################
+# associate the user
+# with the class groups
+######################
+IFS=','
+for classGroupOU in $userClassDN; do
+   classGroup=${classGroupOU#OU=}
+   classGroup=${classGroup,,}
+   samba-tool group addmembers $classGroup $userName
+done
+unset IFS
+
+
+#######################################
+# set primarySID corresponding to gid #
+#######################################
+
+#get the group sid from the gid
+strsid=$(wbinfo --gid-to-sid=$userGid)
+primarygid=$(echo $strsid | cut -d "-" -f 8)
+
+
+# set the user primarySID
+echo "dn: CN=$userName,$userClassDN,$baseDN
+changetype: modify
+replace: primarygroupid
+primarygroupid: $primarygid" > /tmp/$userName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+rm /tmp/$userName
+
+
+############
+# ok
+############
+echo "user created !"

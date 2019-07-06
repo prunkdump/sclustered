@@ -1,0 +1,25 @@
+[<%= @home_share %>]
+        path = <%= @home_path %>
+        read only = No
+        browseable  = No
+
+[<%= @profile_share %>]
+        path = <%= @profile_path %>
+        read only = No
+        browseable  = No
+	force create mode = 0600
+	force directory mode = 0700
+	csc policy = disable
+	store dos attributes = yes
+	vfs objects = acl_xattr
+
+[<%= @share_share %>]
+        path = <%= @share_path %>
+        read only = No
+        browseable  = No
+
+[dfs]
+        path = <%= @dfs_path %>
+        read only = No
+	browseable  = No
+	msdfs root = yes

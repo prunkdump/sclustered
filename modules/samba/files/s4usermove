@@ -1,0 +1,188 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <user_name> <target_class>"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":h" opt; do
+	case $opt in
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# need two args #
+if [ $# -ne 2 ]; then
+    usage
+fi
+
+# check username #
+userName=$1
+if ! wbinfo -i $userName > /dev/null 2>&1; then
+   echo "The user $userName does not exist !"
+   exit 0
+fi
+
+# check the target class #
+userTargetClassName=$2
+userTargetClassGroup=${2,,}
+
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userTargetClassGroup)" | grep "dn: CN=$userTargetClassGroup,OU=$userTargetClassName")
+if [ -z "$searchClass" ]; then
+   echo "The class $userTargetClassName cannot be found !"
+   exit 0
+else
+   userTargetClassDN=${searchClass#dn: CN=$userTargetClassGroup,}
+   userTargetClassDN=${userTargetClassDN%,$baseDN}
+fi
+
+
+#################################
+# get the current student class #
+#################################
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" | grep "dn: CN=$userName")
+
+userCurrentClassDN=${searchClass#dn: CN=$userName,}
+userCurrentClassDN=${userCurrentClassDN%,$baseDN}
+
+if [ "$userCurrentClassDN" == "$userTargetClassDN" ]; then
+   echo "$userName is already is this class"
+   exit 0
+fi
+
+###########################
+# get the new gid and sid #
+###########################
+
+strgid=$(wbinfo --group-info="$userTargetClassGroup")
+userTargetGid=$(echo $strgid | cut -d ":" -f 3)
+
+strsid=$(wbinfo --gid-to-sid=$userTargetGid)
+userTargetPrimarySid=$(echo $strsid | cut -d "-" -f 8)
+
+
+##########################################
+# change class and primary group in LDAP #
+##########################################
+
+# add to the target class group #
+samba-tool group addmembers $userTargetClassGroup $userName
+
+# move LDAP entry #
+echo "dn: CN=$userName,$userCurrentClassDN,$baseDN
+changetype: moddn
+newrdn: CN=$userName
+deleteoldrdn: 1
+newsuperior: $userTargetClassDN,$baseDN" > /tmp/$userName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+#rm /tmp/$userName
+
+# change LDAP entry #
+echo "dn: CN=$userName,$userTargetClassDN,$baseDN
+changetype: modify
+replace: primarygroupid
+primarygroupid: $userTargetPrimarySid
+-
+replace: gidnumber
+gidnumber: $userTargetGid" > /tmp/$userName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+#rm /tmp/$userName
+
+
+#####################################
+# remove from previous class groups #
+#####################################
+IFS=','
+for currentClassGroupOU in $userCurrentClassDN; do
+
+   # check if the group is in the target class #
+   groupInTarget="no"
+   for targetClassGroupOU in $userTargetClassDN; do
+      if [ "$currentClassGroupOU" == "$targetClassGroupOU" ]; then
+         groupInTarget="yes"
+         break
+      fi
+   done
+
+   # if not, remove the user #
+   if [ "$groupInTarget" == "no" ]; then
+      currentClassGroup=${currentClassGroupOU#OU=}
+      currentClassGroup=${currentClassGroup,,}
+      samba-tool group removemembers $currentClassGroup $userName
+   fi
+done
+
+###########################
+# add to new class groups #
+###########################
+for targetClassGroupOU in $userTargetClassDN; do
+
+   # check if already set from previous class #
+   groupInPrevious="no"
+   for currentClassGroupOU in $userCurrentClassDN; do
+      if [ "$targetClassGroupOU" == "$currentClassGroupOU" ]; then
+         groupInPrevious="yes"
+         break
+      fi
+   done
+
+   # if not add to group #
+   if [ "$groupInPrevious" == "no" ]; then
+      targetClassGroup=${targetClassGroupOU#OU=}
+      targetClassGroup=${targetClassGroup,,}
+      if [ "$targetClassGroup" != "$userTargetClassGroup" ]; then
+         samba-tool group addmembers $targetClassGroup $userName
+      fi
+   fi
+done
+
+unset IFS
+
+
+

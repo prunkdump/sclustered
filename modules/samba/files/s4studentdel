@@ -1,0 +1,80 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    echo "usage: $0 <student_name>"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":h" opt; do
+	case $opt in
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# just one arg #
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+# parse username #
+studentName=$1
+
+# check if the student account exist #
+# already done in s4userdel #
+
+# check if the account is a student #
+searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
+if [ -z "$searchStudent" ]; then
+   echo "The user $studentName is not a student !"
+   exit 0
+fi
+
+###################
+# delete the user #
+###################
+
+s4userdel $studentName
