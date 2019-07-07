@@ -1,0 +1,55 @@
+Dim homeDrive, hiddenFile
+homeDrive = "<%= @home_drive %>"
+hiddenFileName = ".hidden"
+hiddenFolders = Array("", "Bureau", "Musique", "Images", "Vidéos", "Téléchargements")
+
+Private Function CheckHiddenFile(filePath)
+
+   'Create filesytem object'
+   Dim fso, objFile, hiddenFile
+   Set fso = CreateObject("Scripting.FileSystemObject")
+
+   'check the hidden file'
+   hiddenFile = homeDrive & filePath & "\" & hiddenFileName
+   If ( Not fso.FileExists(hiddenFile) ) Then
+      Set objFile = fso.CreateTextFile(hiddenFile, True)
+      objFile.Write "desktop.ini" & vbLf
+      objFile.Write "$RECYCLE.BIN" & vbLf
+      objFile.Close
+
+      set objFile = fso.GetFile(hiddenFile)
+      objFile.attributes = 2 
+   End If
+
+End Function
+
+For each path in hiddenFolders
+   CheckHiddenFile(path)
+Next
+
+'----------------------------------------
+' remove access to the root desktop file
+'----------------------------------------
+Dim fso, homeDesktopFile
+Set fso = CreateObject("Scripting.FileSystemObject")
+homeDesktopFile = homeDrive & "\desktop.ini"
+
+'--- check if file exist ---
+If fso.FileExists(homeDesktopFile) Then
+
+   '--- get file acls ---
+   strComputer = "."
+   Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+   Set objFile = objWMIService.Get("Win32_LogicalFileSecuritySetting='" & homeDesktopFile & "'")
+   If objFile.GetSecurityDescriptor(objSD) = 0 Then
+
+      '--- check if the file is already modified ---
+      If uBound(objSD.DACL) >= 2 Then
+
+         '--- remove the all users read right ---
+         Set objShell = CreateObject("Wscript.Shell")
+         intRunError = objShell.Run("%COMSPEC% /c Echo Y| icacls " & homeDesktopFile & " /inheritance:d", 2, True)
+         intRunError = objShell.Run("%COMSPEC% /c Echo Y| icacls " & homeDesktopFile & " /remove *S-1-1-0", 2, True)
+      End If
+   End If
+End If

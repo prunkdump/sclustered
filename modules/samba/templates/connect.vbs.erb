@@ -1,0 +1,79 @@
+Dim commonFolderName, commonDrive
+
+commonFolderName = "<%= @common_dir %>"
+commonDrive = "<%= @common_drive %>"
+
+'---------------'
+'get user class '
+'---------------'
+
+Dim objSysInfo, objUser
+Set objSysInfo = CreateObject("ADSystemInfo")
+
+Dim groupPart, groupName
+classPart = Split(objSysInfo.userName, "OU=")(1)
+className = Lcase(Split(classPart, ",")(0))
+
+'-------------------'
+'get user home path '
+'-------------------'
+
+Dim homeShare
+Set objUser = GetObject("LDAP://" & objSysInfo.UserName)
+homeShare = objUser.homeDirectory
+
+'-----------------'
+'map common drive '
+'-----------------'
+
+Dim commonPath
+commonPath = "\\<%= @accountsrv_dns %>\dfs\" & className
+
+'map common drive'
+Dim wshNetwork
+Set wshNetwork = CreateObject("WScript.Network")
+wshNetwork.MapNetworkDrive commonDrive, commonPath
+
+'rename'
+Set objShella = CreateObject("Shell.Application")
+objShella.NameSpace(commonDrive).Self.name = commonFolderName
+
+'---------------'
+'redirect object'
+'---------------'
+dim objShell, redirectKeys
+Set objShell = WScript.CreateObject("WScript.Shell")
+redirectKeys = "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
+
+'---------------'
+'set redirection'
+'---------------'
+objShell.RegWrite redirectKeys & "\Personal", homeShare , "REG_EXPAND_SZ"
+objShell.RegWrite redirectKeys & "\Desktop", homeShare & "\Bureau", "REG_EXPAND_SZ"
+objShell.RegWrite redirectKeys & "\My Music", homeShare & "\Musique", "REG_EXPAND_SZ"
+objShell.RegWrite redirectKeys & "\My Pictures", homeShare & "\Images", "REG_EXPAND_SZ"
+objShell.RegWrite redirectKeys & "\My Video", homeShare & "\Vidéos", "REG_EXPAND_SZ"
+objShell.RegWrite redirectKeys & "\{374DE290-123F-4565-9164-39C4925E467B}", homeShare & "\Téléchargements", "REG_EXPAND_SZ"
+
+'---------------------------'
+' create redirected folders '
+'---------------------------'
+
+Dim fso
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+If ( Not fso.FolderExists( homeShare & "\Bureau" ) ) Then
+   fso.CreateFolder( homeShare & "\Bureau" )
+End If
+If ( Not fso.FolderExists( homeShare & "\Musique" ) ) Then
+   fso.CreateFolder( homeShare & "\Musique" )
+End If
+If (Not fso.FolderExists( homeShare & "\Images" )) Then
+   fso.CreateFolder( homeShare & "\Images" )
+End If
+If (Not fso.FolderExists( homeShare & "\Vidéos" )) Then
+   fso.CreateFolder( homeShare & "\Vidéos" )
+End If
+If (Not fso.FolderExists( homeShare & "\Téléchargements" )) Then
+   fso.CreateFolder( homeShare & "\Téléchargements" )
+End If
