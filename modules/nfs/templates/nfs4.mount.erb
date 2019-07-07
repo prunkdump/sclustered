@@ -1,0 +1,15 @@
+[Unit]
+# Not Needed since Debian Stretch
+# Requires=local-fs.target nfs-common.service
+
+# Required only on Samba Kerberos Server
+After=samba-ad-dc.service bind9.service
+
+[Mount]
+What=<%= @host %>:<%= @share %>
+Where=<%= @path %>
+Type=nfs4
+Options=<%= @global_options_str %>
+
+[Install]
+WantedBy=multi-user.target
