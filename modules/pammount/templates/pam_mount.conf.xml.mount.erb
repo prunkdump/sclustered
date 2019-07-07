@@ -1,0 +1,6 @@
+<volume<% if @sgrp %> sgrp="<%= @sgrp %>"<% end -%>
+ path="<%= @path %>" mountpoint="<%= @mountpoint %>"<% if @fstype %> fstype="<%= @fstype %>"<% end -%>
+<% if @server %> server="<%= @server %>"<% end -%>
+<% if @noroot %> noroot="<%= @noroot %>"<% end -%>
+<% if @options %> options="<%= @options %>"<% end -%>
+/>
