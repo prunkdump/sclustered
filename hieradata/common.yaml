@@ -1,0 +1,23 @@
+---
+network::slashform: 172.16.0.0/16
+nfs::daemon_count: 64
+samba::domain: lan.lyc-guillaume-fichet.ac-grenoble.fr
+samba::short_domain: FICHLAN
+samba::dns_forwarders:
+   - 172.16.0.1
+samba::home_path: /s4shares/smbhome
+samba::profile_path: /s4shares/smbprofile
+samba::share_path: /s4shares/smbshare
+samba::quota_mount_point: /s4shares
+puppet::fai_debootstraps:
+   fai-stretch-amd64: [stretch,amd64]
+apt::distribution: buster
+apt::debian_reps:
+   - 'http://ftp.fr.debian.org/debian'
+apt::sources:
+   base: ['http://debian','main contrib non-free']
+   security: ['http://security.debian.org/debian-security','main','stretch/updates']
+apt::autoupdates:
+   - o=Debian,a=stable
+   - origin=Debian,archive=stable,label=Debian-Security
+desktop::environment: gnome

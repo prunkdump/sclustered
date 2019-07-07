@@ -1,0 +1,10 @@
+---
+:backends:
+  - yaml
+:yaml:
+  :datadir: /etc/puppet/hieradata
+:hierarchy:
+  - "hostname/%{::hostname}"
+  - "hostnumber/%{::hostnumber}"
+  - "room/%{::room}"
+  - common
