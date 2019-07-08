@@ -5,10 +5,11 @@ class samba::accountserver::postconfig(
    $users_group
 ) {
 
+   # "domain users" is mapped to the "users" group
    file { "$profile_path":
       ensure => directory,
       owner => root,
-      group => "$short_domain\\Domain Users",
+      group => "users",
       mode => '1750',
       require => Service[$adservice],
    }

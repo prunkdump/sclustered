@@ -20,9 +20,10 @@ class samba::dcservice (
 
    exec { 'wait_for_winbind':
       path => '/usr/bin:/usr/sbin:/bin',
-      command => 'bash while ! wbinfo --group-info=FICHLAN\\domain\ admins > /dev/null 2>&1; do sleep 1; done',
+      command => 'while ! wbinfo --group-info=domain\ admins > /dev/null 2>&1; do sleep 1; done',
       subscribe => Service["$adservice"],
       refreshonly => true,
+      provider => 'shell',
    }
 
    # ntp #
