@@ -1,0 +1,8 @@
+[<%= @name %>]
+path = <%= @path %>
+comment = <%= @name %> share
+uid = root
+gid = root
+read only = yes
+auth users = <%= @name %>-replication
+secrets file = /var/lib/rsync/rsyncd-<%= @name %>.secret
