@@ -30,7 +30,7 @@ class samba::bind_setup (
    exec { 'samba_bind_dns_chown':
       command => "chown -R bind:bind $binddlz_path/dns",
       path => '/usr/bin:/usr/sbin:/bin',
-      subscribe => File["$binddlz_path/dns"],
+      subscribe => File["$binddlz_path"],
       refreshonly => true,
       require => Package['bind9'],
    }
