@@ -1,22 +1,22 @@
 ---
 network::slashform: 172.16.0.0/16
 nfs::daemon_count: 64
-samba::domain: lan.lyc-guillaume-fichet.ac-grenoble.fr
-samba::short_domain: FICHLAN
+samba::domain: samdom.com
+samba::short_domain: SAMDOM
 samba::dns_forwarders:
    - 172.16.0.1
-samba::home_path: /s4shares/smbhome
-samba::profile_path: /s4shares/smbprofile
-samba::share_path: /s4shares/smbshare
+samba::home_path: /s4shares/home
+samba::profile_path: /s4shares/profile
+samba::share_path: /s4shares/share
 samba::quota_mount_point: /s4shares
 puppet::fai_debootstraps:
-   fai-stretch-amd64: [stretch,amd64]
+   fai-buster-amd64: [buster,amd64]
 apt::distribution: buster
 apt::debian_reps:
-   - 'http://ftp.fr.debian.org/debian'
+   - 'http://ftp.debian.org/debian'
 apt::sources:
    base: ['http://debian','main contrib non-free']
-   security: ['http://security.debian.org/debian-security','main','stretch/updates']
+   security: ['http://security.debian.org/debian-security','main','buster/updates']
 apt::autoupdates:
    - o=Debian,a=stable
    - origin=Debian,archive=stable,label=Debian-Security
