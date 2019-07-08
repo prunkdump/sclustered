@@ -2,7 +2,6 @@ class samba::bind_setup (
    $domain,
    $network,
    $dns_forwarders,
-   $private_path,
    $binddlz_path,
    $lib_path
 ) {
