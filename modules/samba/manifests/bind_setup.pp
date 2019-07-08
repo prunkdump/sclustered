@@ -19,11 +19,11 @@ class samba::bind_setup (
    
    # set permission to bind #
    # to samba files #
-   file { "$binddlz_path/dns":
+   file { "$binddlz_path":
       ensure => directory,
       owner => 'bind',
       group => 'bind',
-      mode => '0775', 
+      mode => '0770', 
       require => Package['bind9'],
    }
 
@@ -87,7 +87,7 @@ class samba::bind_setup (
    service { 'bind9':
       ensure => running,
       enable => true,
-      subscribe => [File["$binddlz_path/dns","$binddlz_path/dns.keytab",
+      subscribe => [File["$binddlz_path","$binddlz_path/dns.keytab",
                          '/etc/bind/named.conf.options','/etc/bind/named.conf.samba',"$binddlz_path/named.conf"],
                    Exec['samba_bind_dns_chown'],
                    File_line['insert_bind_dlz']],
