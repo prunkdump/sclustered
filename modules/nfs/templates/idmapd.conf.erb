@@ -1,0 +1,22 @@
+[General]
+
+Verbosity = 0
+Pipefs-Directory = /run/rpc_pipefs
+# set your own domain here, if id differs from FQDN minus hostname
+# Domain = localdomain
+Domain = <%= @samba_domain %>
+
+[Mapping]
+
+Nobody-User = nobody
+Nobody-Group = nogroup
+
+[Translation]
+
+Method = static,nsswitch
+
+[Static]
+
+<% @translations.each do |source,dest| -%>
+<%= source %> = <%= dest %>
+<% end -%>
