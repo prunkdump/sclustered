@@ -1,0 +1,5 @@
+Add here the parameters specific to host number
+
+ex : 22.yaml
+---
+desktop::environment: xfce

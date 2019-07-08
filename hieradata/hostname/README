@@ -1,0 +1,5 @@
+Add here the hosts specific parameters
+
+ex : myhostname.yaml
+---
+desktop::environment: xfce

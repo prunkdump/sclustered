@@ -1,0 +1,5 @@
+Add here the room specific parameters
+
+ex : myroomname.yaml
+---
+desktop::environment: xfce
