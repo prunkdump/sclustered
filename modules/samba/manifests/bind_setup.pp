@@ -89,7 +89,7 @@ class samba::bind_setup (
       enable => true,
       subscribe => [File["$binddlz_path/dns","$binddlz_path/dns.keytab",
                          '/etc/bind/named.conf.options','/etc/bind/named.conf.samba',"$binddlz_path/named.conf"],
-                   Exec['samba_private_dns_chown'],
+                   Exec['samba_bind_dns_chown'],
                    File_line['insert_bind_dlz']],
    }
   
