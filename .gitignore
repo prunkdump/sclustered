@@ -1,3 +1,6 @@
 auth.conf
 code
 puppet.conf
+hieradata/hostname/*
+hieradata/hostnumber/*
+hieradata/room/*
