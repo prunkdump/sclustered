@@ -1,3 +1,3 @@
 <% @fai_hosts.each do |hostname, host_params| -%>
-subclass "<%= host_params[2] %>_fai" 1:<%= host_params[0] %> { option host-name <%= hostname %>"; }
+subclass "<%= host_params[2] %>_fai" 1:<%= host_params[0] %> { option host-name "<%= hostname %>"; }
 <% end -%>
