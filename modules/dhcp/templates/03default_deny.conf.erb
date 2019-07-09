@@ -1,0 +1,27 @@
+#------------------------------------
+# default DHCP
+#------------------------------------
+subnet <%= @default_network %> netmask <%= @default_netmask %> {
+
+<% @default_options.each do |optname,optvalue| -%>
+   <%= optname %> <%= optvalue %>;
+<% end -%>
+
+   pool{
+      allow unknown-clients;
+<% if @default_range -%>
+      range <%= @default_range[0]%>  <%= @default_range[1] %>;
+<% end -%>
+
+      #-------------------------
+      #  classes
+      #-------------------------
+<% @pools.each do |poolname,params| -%>
+      deny members of "<%= poolname %>_fai";
+      deny members of "<%= poolname %>_hosts";
+<% end -%>
+<% @classes.each do |classname,classparam| -%>
+      deny members of "<%= classname %>";
+<% end -%>
+   }
+}

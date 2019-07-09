@@ -1,5 +1,6 @@
 class network (
    $slashform  = $network::params::slashform,
+   $gateway = $network::params::gateway,
    $http_proxy = $network::params::http_proxy,
    $https_proxy = $network::params::http_proxy
 ) inherits network::params {
@@ -17,7 +18,7 @@ class network (
    if $network_intmask != '8' and  $network_intmask != '16' and  $network_intmask != '24' {
       fail("Currently only 8, 16, 24 bit netmask are supported !")
    }
-    
+
    # compute netmask #
    $netmask = $network_intmask? {
       '8' => '255.255.255.0',
@@ -49,6 +50,14 @@ class network (
    # compute specials addresses #
    $first_address = "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.1"
    $null_address = "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.0"
+
+
+   # compute gateway #
+   $effective_gateway = $gateway? {
+      undef => $first_address,
+      default => $gateway
+   }
+
 
    ##################
    # configure wget #

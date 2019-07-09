@@ -1,0 +1,22 @@
+# classes #
+<% @pools.each do |poolname,params| -%>
+class "<%= poolname %>_fai" {
+   match hardware;
+}
+
+class "<%= poolname %>_hosts" {
+   match option host-name;
+}
+
+<% end -%>
+<% @classes.each do |classname,classparams| -%>
+class "<%= classname %>" {
+   match if option host-name ~~ "<%= classparams[0] %>";
+}
+
+<% end %>
+# host definition #
+include "/etc/dhcp/conf/free_class.conf";
+include "/etc/dhcp/conf/fai_class.conf";
+include "/etc/dhcp/conf/host_class.conf";
+

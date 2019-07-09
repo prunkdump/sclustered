@@ -1,0 +1,37 @@
+#! /bin/bash
+
+if [ ! $1 ]; then 
+   exit 0
+fi
+
+
+if [ ! -f /var/lib/dhcp/dhcpd.hosts ]; then
+   touch /var/lib/dhcp/dhcpd.hosts
+fi
+
+
+awk -v mac=$1 -v ip=$2 -v hostname=$3 '
+BEGIN {
+   OFS = "\t";
+   found="no";
+}
+
+{
+   if ( $1 == mac ) {
+      print mac, ip, hostname;
+      found="yes";
+   }
+   else {
+      print $0;
+   }
+}
+
+
+END{
+   if ( found != "yes" ) {
+      print mac, ip, hostname;
+   }
+} ' /var/lib/dhcp/dhcpd.hosts > /var/lib/dhcp/dhcpd_temp.hosts
+
+mv /var/lib/dhcp/dhcpd_temp.hosts /var/lib/dhcp/dhcpd.hosts
+

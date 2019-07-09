@@ -1,5 +1,6 @@
 ---
 network::slashform: 172.16.0.0/16
+network::gateway: 172.16.0.1
 nfs::daemon_count: 64
 samba::domain: samdom.com
 samba::short_domain: SAMDOM

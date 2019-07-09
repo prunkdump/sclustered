@@ -1,0 +1,6 @@
+#! /bin/bash
+
+if [ -f /var/lib/dhcp/dhcpd.hosts ]; then
+   cat /var/lib/dhcp/dhcpd.hosts
+fi
+

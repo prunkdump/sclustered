@@ -1,0 +1,35 @@
+#----------------
+# classes 
+#----------------
+include "/etc/dhcp/conf/02s4_class.conf";
+
+
+#########################
+# MAIN NETWORK PARAMETERS
+#########################
+shared-network s4lan{
+
+   use-host-decl-names on;
+
+   # !! disabled !!
+   #on commit {
+   #   set ClientMac = concat (
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,1,1))),2), ":",
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,2,1))),2), ":",
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,3,1))),2), ":",
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,4,1))),2), ":",
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,5,1))),2), ":",
+   #      suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,6,1))),2)
+   #   );
+   #   set ClientIP = binary-to-ascii(10, 8, ".", leased-address);
+   #   set ClientBaseHostname = concat(option host-name,".",config-option domain-name);
+   #   #set ClientHostname =  pick-first-value(ddns-fwd-name,host-decl-name,option fqdn.fqdn,option host-name,"none");
+   #   set ClientHostname =  pick-first-value(ddns-fwd-name, ClientBaseHostname);
+   #   execute("/usr/sbin/dhcp-host-update", ClientMac, ClientIP, ClientHostname);
+   #}
+   
+   include "/etc/dhcp/conf/01s4_net.conf";
+<% if @default_network and @default_netmask -%>
+   include "/etc/dhcp/conf/03default_deny.conf";  
+<% end -%>
+}
