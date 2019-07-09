@@ -7,8 +7,8 @@ node 'example_pdc.samdom.com' {
       account_server => true,
       print_server => true,
    }
-   #class { 'dhcp': }
-   #class { 'apt::server': }
+   class { 'dhcp': }
+   class { 'apt::server': }
    #class { 'puppet::camaster': }
    #class { 'cups':
    #   disable_lpupdate => true,

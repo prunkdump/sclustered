@@ -1,0 +1,4 @@
+Acquire::http::Proxy "http://<%= @proxy_host %>:<%= @proxy_port %>";
+<% @directs.each do |host| -%>
+Acquire::http::Proxy::<%= host %> DIRECT;
+<% end -%>

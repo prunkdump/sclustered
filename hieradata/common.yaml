@@ -19,6 +19,6 @@ apt::sources:
    base: ['http://debian','main contrib non-free']
    security: ['http://security.debian.org/debian-security','main','buster/updates']
 apt::autoupdates:
-   - o=Debian,a=stable
-   - origin=Debian,archive=stable,label=Debian-Security
+   - origin=Debian,codename=${distro_codename},label=Debian
+   - origin=Debian,codename=${distro_codename},label=Debian-Security
 desktop::environment: gnome
