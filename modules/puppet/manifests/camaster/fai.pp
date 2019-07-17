@@ -64,11 +64,6 @@ define puppet::camaster::fai::debootstrap ( $debootname = $title, $params ) {
       fai_arch => $fai_arch,
    }
 
-   file { "$base_conf_path":
-      ensure => directory,
-      require => Puppet::Camaster::Fai::Debootstrap::Conf["$debootname"]
-   }
-
    # build debootstrap #
    exec { "fai-setup -e -C $base_conf_path":
       path => '/usr/bin:/usr/sbin:/bin',
@@ -197,11 +192,10 @@ class puppet::camaster::fai {
    # fai base config #
    file { '/srv/fai/config':
       ensure => directory,
-      source => 'file:/usr/share/doc/fai-doc/examples/simple'
+      source => 'file:/usr/share/doc/fai-doc/examples/simple',
       recurse => true,
       purge => true,
       force => true,
-      mode => '0755',
       require => [Package['fai-quickstart'],File['/srv/fai']],
    }
 
@@ -214,7 +208,7 @@ class puppet::camaster::fai {
       ensure => file,
       source => 'puppet:///modules/puppet/disk_config_FAIBASE',
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
   
@@ -223,21 +217,21 @@ class puppet::camaster::fai {
       ensure => file,
       content => template('puppet/debconf_LOCALE.erb'),
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    file { '/srv/fai/config/package_config/LOCALE':
       ensure => file,
       content => template('puppet/package_LOCALE.erb'),
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    file { '/srv/fai/config/class/LOCALE.var':
       ensure => file,
       content => template('puppet/package_LOCALE.erb'),
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    # proxy #
@@ -251,7 +245,7 @@ class puppet::camaster::fai {
       ensure => $fai_proxy_file_status,
       content => template('puppet/instsoft.PROXY.erb'),
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    # samba #
@@ -261,42 +255,42 @@ class puppet::camaster::fai {
            '/srv/fai/config/files/etc/krb5.conf']:
       ensure => directory,
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    file { '/srv/fai/config/files/etc/krb5.conf/S4CLIENT':
       ensure => file,
       content => template('puppet/file_krb5.conf.erb'),
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc/krb5.conf']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc/krb5.conf']],
    }
 
    file { '/srv/fai/config/files/etc/samba/smb.conf/S4CLIENT':
       ensure => file,
       content => template('puppet/client_smb.conf.erb'),
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc/samba/smb.conf']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc/samba/smb.conf']],
    }
 
    file { '/srv/fai/config/package_config/S4CLIENT':
       ensure => file,
       source => 'puppet:///modules/puppet/package_S4CLIENT',
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    # hosts file #
    file { '/srv/fai/config/files/etc/hosts':
       ensure => directory,
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc']],
    }
 
    file { '/srv/fai/config/files/etc/hosts/FAIBASE':
       ensure => file,
       source => 'puppet:///modules/puppet/file_hosts',
       mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'],File['/srv/fai/config/files/etc/hosts']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'],File['/srv/fai/config/files/etc/hosts']],
    }
 
    # nsupdate #
@@ -305,21 +299,21 @@ class puppet::camaster::fai {
            '/srv/fai/config/files/etc/dhcp/dhclient-exit-hooks.d','/srv/fai/config/files/etc/dhcp/dhclient-exit-hooks.d/nsupdate']:
       ensure => directory,
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc']],
    }
 
    file { '/srv/fai/config/files/etc/dhcp/dhclient-enter-hooks.d/nsupdate/S4CLIENT':
       ensure => file,
       content => template('puppet/nsupdate_enter.erb'),
       mode => '0744',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc/dhcp/dhclient-enter-hooks.d/nsupdate']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc/dhcp/dhclient-enter-hooks.d/nsupdate']],
    }
 
    file { '/srv/fai/config/files/etc/dhcp/dhclient-exit-hooks.d/nsupdate/S4CLIENT':
       ensure => file,
       content => template('puppet/nsupdate_exit.erb'),
       mode => '0744',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/files/etc/dhcp/dhclient-exit-hooks.d/nsupdate']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/files/etc/dhcp/dhclient-exit-hooks.d/nsupdate']],
    }
 
 
@@ -330,7 +324,7 @@ class puppet::camaster::fai {
    #   ensure => file,
    #   source => 'puppet:///modules/puppet/script_setup.DEFAULT',
    #   mode => '0755',
-   #   require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+   #   require => [Package['fai-quickstart'], File['/srv/fai/config']],
    #}
 
    exec { 'ensure_root_ssh_key':
@@ -343,28 +337,28 @@ class puppet::camaster::fai {
    file { ['/srv/fai/config/files/root','/srv/fai/config/files/root/.ssh','/srv/fai/config/files/root/.ssh/authorized_keys']:
       ensure => directory,
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    file { '/srv/fai/config/files/root/.ssh/authorized_keys/S4CLIENT':
       ensure => file,
       source => 'file:///root/.ssh/id_rsa.pub',
       mode => '0600',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config', 'ensure_root_ssh_key'],File['/srv/fai/config/files/root/.ssh/authorized_keys']],
+      require => [Package['fai-quickstart'], Exec['ensure_root_ssh_key'],File['/srv/fai/config','/srv/fai/config/files/root/.ssh/authorized_keys']],
    }
 
    # main script #
    file { '/srv/fai/config/scripts/S4CLIENT':
       ensure => directory,
       mode => '0755',  
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    file { '/srv/fai/config/scripts/S4CLIENT/10-main':
       ensure => file,
       content => template('puppet/script_10-main.erb'),
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config'], File['/srv/fai/config/scripts/S4CLIENT']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/scripts/S4CLIENT']],
    }
 
 
@@ -373,7 +367,7 @@ class puppet::camaster::fai {
       ensure => file,
       source => 'puppet:///modules/puppet/class_50-host-classes',
       mode => '0755',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    ###############
@@ -382,7 +376,7 @@ class puppet::camaster::fai {
    nfs::server::nfsexport { 'fai_srv_export':
       path => '/srv/fai',
       options => ['async','ro','no_subtree_check','no_root_squash'],
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }      
    
    #############
@@ -400,13 +394,6 @@ class puppet::camaster::fai {
    file { '/srv/tftp/fai/pxelinux.cfg/default':
       ensure => present,
    }
-
-   # to store configured hosts # 
-   file { '/srv/tftp/fai-hosts.conf':
-      ensure => file,
-      mode => '0644',
-      require => [Package['fai-quickstart'], Exec['create_base_fai_config']],
-    }
 
    # configure host #
    $fai_hosts_list = keys($fai_hosts)

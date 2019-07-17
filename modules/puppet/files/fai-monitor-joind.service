@@ -1,0 +1,10 @@
+[Unit]
+Description=Fai monitor join daemon
+
+[Service]
+Type=forking
+PIDFile=/var/run/fai-monitor-joind/fai-monitor-joind.pid
+ExecStart=/usr/sbin/fai-monitor-joind
+
+[Install]
+WantedBy=multi-user.target

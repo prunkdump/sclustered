@@ -1,0 +1,222 @@
+#! /bin/bash
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+# fist step : check host identity
+# param : ip hostname sshfingerprint macaddress
+# global : hostConnectTag (how to ssh host)
+#          hostRootPath (in case chrooted fai install)
+#          get hodtIp hostName hostSSHFingerprint hostMacAddress
+function identifyHost() {
+   hostIp=$1
+
+   # try to connect with ip and get hostname #
+   hostName=$(ssh $1 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "hostname")
+   if (($? == 0)); then
+      hostConnectTag=$1
+   else # try with the hostname #
+      hostName=$(ssh $2 -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "hostname")
+      if (($? == 0)); then
+         hostConnectTag=$2
+      else
+         return 1
+      fi
+   fi
+
+   # build hostname and fqdn #
+   domainName=$(dnsdomainname)
+   hostName=$(echo $hostName | cut -d . -f1)
+   hostFqdn="$hostName.$domainName"
+
+   # try to connect and get the ssh fingerprint #
+   hostSSHFingerprint=$(ssh $hostConnectTag -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "ssh-keygen -lf /etc/ssh/ssh_host_rsa_key.pub" | cut -f 2 -d " ")
+   if (($? != 0)); then
+      return 1
+   fi
+
+   # try to connect and get mac address #
+   hostMacAddress=$(ssh $hostConnectTag -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "cat /sys/class/net/*[!lo]/address")
+   if (($? != 0)); then
+      return 1
+   fi
+
+   # compare with given value #
+   echo "$hostMacAddress" | grep -q -i "$4"
+   if [[ $hostName != $2 || $hostSSHFingerprint != $3 || $? -ne '0' ]]; then
+      return 1
+   fi
+
+   # host is identified, get the root path #
+   if $(ssh $hostConnectTag -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "test -d /target"); then
+      hostRootPath="/target"
+   else
+      hostRootPath="/"
+   fi
+
+   # everythings goes fine #
+   return 0
+}
+
+
+# second step
+# we can use all there functions #
+# they use global variables #
+function faiHostRootCommand() {
+   ssh $hostConnectTag -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "chroot $hostRootPath $1"
+}
+
+function faiHostRootScpSend() {
+   if [ "$hostRootPath" == "/" ]; then
+      scp -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR $1 $hostConnectTag:$2
+   else
+      scp -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR $1 $hostConnectTag:$hostRootPath$2
+   fi
+}
+
+function faiHostCommand() {
+   ssh $hostConnectTag -oBatchMode=yes -oUserKnownHostsFile=/dev/null -oStrictHostKeyChecking=no -oLogLevel=ERROR "$1"
+}
+
+
+function puppetizeHost() {
+
+   # check if the certificate is already requested #
+   # we must sign before clean #
+   if puppet cert list | grep $hostFqdn; then
+      puppet cert sign $hostFqdn
+   fi
+
+   # clean cert if needed #
+   if puppet cert list --all | grep $hostFqdn; then
+      puppet cert clean $hostFqdn
+   fi
+
+   # generate puppert cert #
+   puppet cert generate $hostFqdn
+
+   #create client cert directories #
+   faiHostRootCommand "mkdir -p /var/lib/puppet/ssl/certs"
+   faiHostRootCommand "mkdir -p /var/lib/puppet/ssl/private_keys"
+
+   # copy the certificates #
+   faiHostRootScpSend /var/lib/puppet/ssl/certs/ca.pem /var/lib/puppet/ssl/certs/ca.pem
+   faiHostRootScpSend /var/lib/puppet/ssl/certs/$hostFqdn.pem /var/lib/puppet/ssl/certs/$hostFqdn.pem
+   faiHostRootScpSend /var/lib/puppet/ssl/private_keys/$hostFqdn.pem /var/lib/puppet/ssl/private_keys/$hostFqdn.pem
+}
+
+function sshAcceptHost() {
+   # clean ssh keys #
+   ssh-keygen -R $hostIp
+   ssh-keygen -R $hostName
+   ssh-keygen -R $hostFqdn
+
+   # get the new ssh keys #
+   ssh-keyscan -t rsa  $hostConnectTag > /tmp/$hostName
+
+   # check the fingerprint and add to know_host #
+   hostNameFingerprint=$(ssh-keygen -lf /tmp/$hostName | cut -f 2 -d " ")
+   if [[ $hostNameFingerprint != $hostSSHFingerprint ]]; then
+      echo "!!! host identification has changed !!!"
+      exit 1
+   fi
+
+   # save to known host #
+   ssh-keyscan -t dsa,rsa,ecdsa  $hostConnectTag > /tmp/$hostName
+
+   if [ $hostConnectTag != $hostIp ]; then
+      cat /tmp/$hostName >> /root/.ssh/known_hosts
+   fi
+
+   if [ $hostConnectTag != $hostName ]; then
+      cat /tmp/$hostName | sed "s/$hostConnectTag/$hostName/" >> /root/.ssh/known_hosts
+   fi
+
+   if [ $hostConnectTag != $hostFqdn ]; then
+      cat /tmp/$hostName | sed "s/$hostConnectTag/$hostFqdn/" >> /root/.ssh/known_hosts
+   fi
+
+   # encrypt #
+   ssh-keygen -H
+}
+
+
+function joinHost() {
+   echo "Joining host $hostName"
+   faiHostRootCommand "net ads join -Uadministrator%$SAMBAPASSWORD"
+   # now created by samba
+   #faiHostRootCommand "rm -f /etc/krb5.keytab"
+   #faiHostRootCommand "net ads keytab create -P"
+
+   # reboot if not already done #
+   if [ "$hostRootPath" == "/target" ]; then
+      faiHostCommand "faireboot"
+   else
+      # do nsupdate and launch puppet #
+      sleep 1 #wait for /etc/krb5.keytab
+      lastLease=$(faiHostRootCommand "cat /var/lib/dhcp/dhclient* | grep 'fixed-address' | tail -1")
+      lastIP=$(echo $lastLease | sed 's/;//' | cut -d' ' -f2)
+      faiHostCommand "reason=BOUND new_ip_address=$lastIP /etc/dhcp/dhclient-exit-hooks.d/nsupdate"
+      faiHostCommand "systemctl restart puppet"
+   fi
+}
+
+function getHostInfo() {
+   echo "--------------------"
+   echo "Host : $hostName"
+   echo "Mac : $hostMacAddress"
+   echo "SSH : $hostSSHFingerprint"
+   echo "--------------------"
+}
+
+
+#######################
+#       joinning      #
+#######################
+
+# check the host file #
+if [ ! -s /var/cache/fai-join/fai-waiting-hosts ]; then
+   echo "No host to join."
+   exit 0
+fi
+
+# get samba password #
+read -s -p "Give Samba4 password : " SAMBAPASSWORD
+echo
+
+# check samba password #
+echo "$SAMBAPASSWORD" | kinit administrator
+if (($? != 0)); then
+   echo "Bad samba password !"
+   exit 0
+fi
+
+# copy the waiting host file #
+cp /var/cache/fai-join/fai-waiting-hosts /tmp/fai-waiting-hosts
+
+# start to join the host #
+while read -u 3 hostLine; do
+   echo "####################"
+   # identify host #
+   if ! identifyHost $hostLine; then
+      echo "The following host can't be identified :"
+      echo "$hostLine"
+      echo "Maybe the host is offline or the install was relaunched."
+      if [ $(ask_yes_or_no "Would you like to remove the host of the wainting list ?") == "yes" ]; then
+         sed -i "\|$hostLine|d" /var/cache/fai-join/fai-waiting-hosts
+      fi
+   else
+      # host is identified ask for join #
+      getHostInfo
+      if [ $(ask_yes_or_no "join $hostName to the domain ?") == "yes" ]; then
+         puppetizeHost
+         sshAcceptHost
+         joinHost
+         sed -i "\|$hostLine|d" /var/cache/fai-join/fai-waiting-hosts
+      fi
+   fi
+done 3</tmp/fai-waiting-hosts
