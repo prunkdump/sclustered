@@ -181,6 +181,7 @@ class puppet::camaster::fai {
       recurse => true,
       purge => true,
       force => true,
+      recurselimit => 1,
    }
 
    $debootstrap_list = keys($fai_debootstraps)
