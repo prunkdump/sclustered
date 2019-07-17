@@ -1,0 +1,43 @@
+#! /bin/sh
+sambaDomain='<%= @samba_domain %>'
+realm='<%= @samba_realm %>'
+hostname=$(hostname)
+
+###################
+# PTR computation #
+###################
+getPTR() {
+   ipa=$(echo $1 | cut -d"." -f1)
+   ipb=$(echo $1 | cut -d"." -f2)
+   ipc=$(echo $1 | cut -d"." -f3)
+   ipd=$(echo $1 | cut -d"." -f4)
+   ipPTR="$ipd.$ipc.$ipb.$ipa.in-addr.arpa"
+   echo $ipPTR
+}
+
+################## checks ##########################
+
+# check reason
+if [ "$reason" = "EXPIRE" -o "$reason" = "RELEASE" ]; then
+
+   # check if we have the keytab #
+   # else we cannot do ddns #
+   if [ -e "/etc/krb5.keytab" ]; then
+
+      # check if we can init kerberos #
+      machinePrincipal="$(hostname | tr '[:lower:]' '[:upper:]')\$@$realm"
+      if kinit -k $machinePrincipal; then
+
+################## update ##########################
+
+         ##################
+         # EXPIRE|RELEASE #
+         ##################
+         # -> delete the PTR record
+         /usr/bin/nsupdate -g <<EOCMD
+update delete $(getPTR $old_ip_address) PTR
+
+EOCMD
+      fi
+   fi
+fi

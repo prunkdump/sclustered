@@ -1,0 +1,4 @@
+#! /bin/bash
+
+# assign classes to hosts
+echo "FAIBASE DEBIAN LOCALE PROXY S4CLIENT"

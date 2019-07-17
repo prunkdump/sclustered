@@ -1,0 +1,48 @@
+#! /bin/bash
+
+# copy the samba confs #
+fcopy -Bv /etc/samba/smb.conf
+
+# add libnss-winbind #
+sed 's/\(^\s*\(passwd\|group\):.*$\)/\1 winbind/' $target/etc/nsswitch.conf
+
+# set realm #
+fcopy -Bv /etc/krb5.conf
+#sed -i 's/default_realm\s*=.*/default_realm = <%= @samba_realm %>/' $target/etc/krb5.conf
+
+# set /etc/hosts ? #
+# needed to join #
+# !!! need to be executed after FAIBASE !!! #
+#echo "127.0.0.1	$HOSTNAME.<%= @samba_domain %>	$HOSTNAME" >> $target/etc/hosts
+
+# nsupdate dhclient scripts #
+fcopy -Bv /etc/dhcp/dhclient-enter-hooks.d/nsupdate
+fcopy -Bv /etc/dhcp/dhclient-exit-hooks.d/nsupdate
+
+# change the ntp source #
+# sed -i '/^\s*server /d' $target/etc/ntp.conf
+sed -i 's/^#\s*server .*/server <%= @hostname %> iburst prefer/' $target/etc/ntp.conf
+
+# copy the root key #
+# and use it during the install #
+mkdir -p $target/root/.ssh
+mkdir -p /root/.ssh
+fcopy -Bv /root/.ssh/authorized_keys
+cp $target/root/.ssh/authorized_keys /root/.ssh/authorized_keys
+
+# save the ssh host key #
+mkdir -p $target/etc/ssh
+cp /etc/ssh/ssh_host_*_key $target/etc/ssh/
+chmod 600 $target/etc/ssh/ssh_host_*_key
+cp /etc/ssh/ssh_host_*_key.pub $target/etc/ssh/
+chmod 644 $target/etc/ssh/ssh_host_*_key.pub
+
+# enable the puppet agent #
+sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = <%= @casrv_dns %>/' $target/etc/puppet/puppet.conf
+sed -i 's/^\s*\[main\]\s*$/[main]\nserver = <%= @mastersrv_dns %>/' $target/etc/puppet/puppet.conf
+$ROOTCMD puppet agent --enable
+$ROOTCMD systemctl enable puppet
+
+# !!!BUG!!!? #
+# start puppet after network #
+#sed -i "s/Documentation=man:puppet-agent(8)/Documentation=man:puppet-agent(8)\nWants=network-online.target\nAfter=network-online.target/g" $target/lib/systemd/system/puppet.service

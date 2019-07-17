@@ -1,0 +1,13 @@
+# For a detailed description see nfsroot.conf(5)
+
+# "<suite> <mirror>" for debootstrap
+FAI_DEBOOTSTRAP="<%= @fai_distribution %> <%= @apt_debian_reps[0] %>"
+FAI_ROOTPW='<%= @fai_root_password %>'
+
+NFSROOT=/srv/fai/nfsroot-<%= @fai_distribution %>-<%= @fai_arch %>
+TFTPROOT=/srv/tftp/fai
+NFSROOT_HOOKS=/etc/fai/nfsroot-hooks/
+FAI_DEBOOTSTRAP_OPTS="--exclude=wget --arch <%= @fai_arch %>"
+
+# Configuration space
+FAI_CONFIGDIR=/srv/fai/config

@@ -7,7 +7,8 @@ class puppet (
    $fai_loguser = $puppet::params::fai_loguser,
    $fai_root_password = $puppet::params::fai_root_password,
    $fai_debootstraps = $puppet::params::fai_debootstraps,
-   $fai_hosts = $puppet::params::fai_hosts
+   $fai_hosts = $puppet::params::fai_hosts,
+   $fai_locale = $puppet::params::fai_locale
 ) inherits puppet::params {
 
 

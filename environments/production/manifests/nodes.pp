@@ -9,7 +9,7 @@ node 'example_pdc.samdom.com' {
    }
    class { 'dhcp': }
    class { 'apt::server': }
-   #class { 'puppet::camaster': }
+   class { 'puppet::camaster': }
    #class { 'cups':
    #   disable_lpupdate => true,
    #}

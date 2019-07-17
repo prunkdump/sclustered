@@ -12,6 +12,15 @@ samba::share_path: /s4shares/share
 samba::quota_mount_point: /s4shares
 puppet::fai_debootstraps:
    fai-buster-amd64: [buster,amd64]
+puppet::fai_locale:
+   main: en_US.UTF8
+   task: english
+   keymap: us
+   xkbmodel: pc105
+   xkbmodelname: 'Generic 105-key PC (intl.)'
+   xkblayout: en
+   xkbvariant: US
+   xkboptions: 'ctrl:nocaps,terminate:ctrl_alt_bksp'
 apt::distribution: buster
 apt::debian_reps:
    - 'http://ftp.debian.org/debian'

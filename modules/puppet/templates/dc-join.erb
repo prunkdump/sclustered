@@ -1,0 +1,107 @@
+#! /bin/bash
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+function puppetizeHost() {
+
+   # check if the certificate is already requested #
+   # we must sign before clean #
+   if puppet cert list | grep $hostFqdn; then
+      puppet cert sign $hostFqdn
+   fi
+
+   # clean cert if needed #
+   if puppet cert list --all | grep $hostFqdn; then
+      puppet cert clean $hostFqdn
+   fi
+
+   # generate puppert cert #
+   puppet cert generate --dns_alt_names "'$masterdns,$masterdns.$domain'" $hostFqdn
+
+   #create client cert directories #
+   ssh $hostip "mkdir -p /var/lib/puppet/ssl/certs"
+   ssh $hostip "mkdir -p /var/lib/puppet/ssl/private_keys"
+
+   # copy the certificates #
+   scp /var/lib/puppet/ssl/certs/ca.pem $hostip:/var/lib/puppet/ssl/certs/ca.pem
+   scp /var/lib/puppet/ssl/certs/$hostFqdn.pem $hostip:/var/lib/puppet/ssl/certs/$hostFqdn.pem
+   scp /var/lib/puppet/ssl/private_keys/$hostFqdn.pem $hostip:/var/lib/puppet/ssl/private_keys/$hostFqdn.pem
+}
+
+
+#######################
+#       joinning      #
+#######################
+
+# one arg, the host #
+if [ $# != 1 ]; then
+    echo "Give the host ip to join !"
+    exit 0
+fi
+hostip="$1"
+
+
+# get samba password #
+read -s -p "Give Samba4 password : " SAMBAPASSWORD
+echo
+
+# check samba password #
+echo "$SAMBAPASSWORD" | kinit administrator
+if (($? != 0)); then
+   echo "Bad samba password !"
+   exit 0
+fi
+
+# get hostname #
+domain='<%= @samba_domain %>'
+realm='<%= @samba_realm %>'
+reversezone='<%= @reverse_zone %>'
+camasterdns='<%= @casrv_dns %>'
+masterdns='<%= @mastersrv_dns %>'
+hostname=$(ssh $hostip hostname)
+hostnameU="$(echo $hostname | tr '[:lower:]' '[:upper:]')"
+hostFqdn="$hostname.$domain"
+
+# compute reverse ip #
+ipa=$(echo $hostip | cut -d'.' -f1)
+ipb=$(echo $hostip | cut -d'.' -f2)
+ipc=$(echo $hostip | cut -d'.' -f3)
+ipd=$(echo $hostip | cut -d'.' -f4)
+reverseip="$ipd.$ipc.$ipb.$ipa.in-addr.arpa"
+
+# start to join the host #
+ssh $hostip "rm -f /etc/samba/smb.conf"
+ssh $hostip "samba-tool domain join $domain DC -Uadministrator --realm=$realm --dns=BIND9_DLZ --password=$SAMBAPASSWORD --option='idmap_ldb:use rfc2307 = yes'"
+
+# create A and PTR dsn entry #
+samba-tool dns add localhost $domain $hostname A $hostip -Uadministrator --password=$SAMBAPASSWORD
+samba-tool dns add localhost $reversezone $reverseip PTR $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
+
+# get guid #
+while read -r line; do
+   if echo $line | grep $hostnameU; then
+      read -r line
+      objectguid=$(echo $line | cut -d' ' -f2)
+   fi
+done < <(ldbsearch -H /var/lib/samba/private/sam.ldb '(invocationId=*)' --cross-ncs objectguid)
+
+# update guid dns #
+if [ -n "$objectguid" ]; then
+   samba-tool dns add localhost _msdcs.$domain $objectguid CNAME $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
+fi
+
+# copy idmap #
+ssh $hostip "systemctl stop samba-ad-dc"
+tdbbackup -s .bak /var/lib/samba/private/idmap.ldb
+scp /var/lib/samba/private/idmap.ldb.bak $hostip:/var/lib/samba/private/idmap.ldb
+#we do not restart samba, puppet will do it
+
+# give puppet certificates #
+puppetizeHost
+ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = $camasterdns/' $target/etc/puppet/puppet.conf"
+ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nserver = $masterdns/' $target/etc/puppet/puppet.conf"

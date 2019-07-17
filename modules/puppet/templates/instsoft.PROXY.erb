@@ -1,0 +1,10 @@
+#! /bin/bash
+
+# update wgetrc for the install #
+<% if @http_proxy -%>
+sed -i 'r/#http_proxy =.*/http_proxy = http:\/\/<%= @http_proxy %>\//' /etc/wgetrc
+<% end %>
+<% if @https_proxy -%>
+sed -i 'r/#https_proxy =.*/https_proxy = http:\/\/<%= @https_proxy %>\//' /etc/wgetrc
+<% end %>
+sed -i 'r/#use_proxy =.*/use_proxy = on/' /etc/wgetrc

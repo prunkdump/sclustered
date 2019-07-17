@@ -1,0 +1,7 @@
+# Build the nfsroot with the apt server 
+
+# debian 
+deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/debian/ <%= @fai_distribution %> main contrib non-free
+
+# security #
+deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/security.debian.org/ <%= @fai_distribution %>/updates main contrib non-free

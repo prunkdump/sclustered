@@ -1,0 +1,34 @@
+[global]
+
+   # domain #
+   security = ADS
+   workgroup = <%= @samba_short_domain %>
+   realm = <%= @samba_realm %>
+
+   # security #
+   dedicated keytab file = /etc/krb5.keytab
+   kerberos method = secrets and keytab
+   winbind refresh tickets = Yes
+
+   log file = /var/log/samba/%m.log
+   log level = 1
+
+   # winbind config #
+   # winbind use default domain = yes
+   winbind enum users  = no
+   winbind enum groups = no
+
+   # idmap config #
+   idmap config * : backend = tdb
+   idmap config * : range = 3000-7999
+   idmap config <%= @samba_short_domain %>:backend = ad
+   idmap config <%= @samba_short_domain %>:schema_mode = rfc2307
+   idmap config <%= @samba_short_domain %>:range = 3000000-9999999
+   idmap config <%= @samba_short_domain %>:unix_nss_info = yes
+   idmap config <%= @samba_short_domain %>:unix_primary_group = yes
+
+   # filesystem config #
+   vfs objects = acl_xattr
+   map acl inherit = yes
+   store dos attributes = yes
+

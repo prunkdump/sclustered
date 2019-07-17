@@ -1,0 +1,79 @@
+#! /bin/sh
+sambaDomain='<%= @samba_domain %>'
+realm='<%= @samba_realm %>'
+hostname=$(hostname)
+
+###################
+# PTR computation #
+###################
+getPTR() {
+   ipa=$(echo $1 | cut -d"." -f1)
+   ipb=$(echo $1 | cut -d"." -f2)
+   ipc=$(echo $1 | cut -d"." -f3)
+   ipd=$(echo $1 | cut -d"." -f4)
+   ipPTR="$ipd.$ipc.$ipb.$ipa.in-addr.arpa"
+   echo $ipPTR
+}
+
+################## checks ##########################
+
+# check reason
+if [ "$reason" = "BOUND" -o "$reason" = "REBOOT" -o "$reason" = "RENEW" -o "$reason" = "REBIND" ]; then
+
+   # check if we have the keytab #
+   # else we cannot do ddns #
+   if [ -e "/etc/krb5.keytab" ]; then
+
+      # check if we can init kerberos #
+      machinePrincipal="$(hostname | tr '[:lower:]' '[:upper:]')\$@$realm"
+      if kinit -k $machinePrincipal; then
+
+################## update ##########################
+
+         case $reason in
+            BOUND|REBOOT)
+            #########
+            # BOUND #
+            #########
+            # -> always update the new entry #
+            /usr/bin/nsupdate -g <<EOCMD
+update delete $hostname.$sambaDomain A
+update add $hostname.$sambaDomain 3800 A $new_ip_address
+send
+update add $(getPTR $new_ip_address) 3800 PTR $hostname.$sambaDomain.
+
+EOCMD
+            # -> if old != new delete the old PTR #
+            if [ -n "$old_ip_address" ]; then
+               if [ "$old_ip_address" != "$new_ip_address" ]; then
+                  /usr/bin/nsupdate -g <<EOCMD
+update delete $(getPTR $old_ip_address) PTR
+
+EOCMD
+               fi
+            fi
+            ;;
+            RENEW|REBIND)
+            #########
+            # RENEW #
+            #########
+            # -> update only if old != new
+            if [ -n "$old_ip_address" ]; then
+               if [ "$old_ip_address" != "$new_ip_address" ]; then
+                  /usr/bin/nsupdate -g <<EOCMD
+update delete $hostname.$sambaDomain A
+update add $hostname.$sambaDomain 3800 A $new_ip_address
+send
+update delete $(getPTR $old_ip_address) PTR
+update add $(getPTR $new_ip_address) 3800 PTR $hostname.$sambaDomain.
+
+EOCMD
+               fi
+            fi
+            ;;
+            *)
+
+         esac
+      fi
+   fi
+fi

@@ -1,0 +1,12 @@
+PACKAGES aptitude
+samba
+samba-dsdb-modules
+samba-vfs-modules
+puppet
+ntp
+krb5-user
+dnsutils
+#winbind
+# NEEDED : systemd dbud need to know 
+# the availiable nsswitch modules before starting 
+libnss-winbind
