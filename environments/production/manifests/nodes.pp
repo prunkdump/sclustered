@@ -31,17 +31,17 @@ node 'example_dc.samdom.com' {
 
 node default {
 
-   #include stdlib
+   include stdlib
  
    #########
    # setup #
    #########
-   #class { 'network':
-   #   stage => 'setup',
-   #}
-   #class { 'apt::client':
-   #   stage => 'setup',
-   #}
+   class { 'network':
+      stage => 'setup',
+   }
+   class { 'apt::client':
+      stage => 'setup',
+   }
    #class { 'puppet::client':
    #   stage => 'setup',
    #   require => Class['apt::client'],
