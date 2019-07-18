@@ -92,7 +92,9 @@ define puppet::camaster::fai::faihost (
    # get host param #
    $host_mac = $fai_hosts_hash[$host_name][0]
    $host_umac = upcase($host_mac)
-   $host_mac_filename = "01-$host_umac"
+   $host_umac_split = split($host_umac, ':')
+   $host_umac_join = join($host_umac_split, '-')
+   $host_mac_filename = "01-$host_umac_join"
    $host_debootstrap = $fai_hosts_hash[$host_name][1]
    $host_class = $fai_hosts_hash[$host_name][2]
 
