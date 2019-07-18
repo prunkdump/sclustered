@@ -1,0 +1,79 @@
+#! /usr/bin/perl
+use strict;
+use warnings;
+use experimental 'smartmatch';
+
+my $printerListFile = "/etc/cups/printers_list.conf";
+
+#######################################
+# get the list of printers to install #
+#######################################
+my %targetPrinters;
+open(PTL, "< $printerListFile");
+while( defined( my $line = <PTL> ) ) {
+   chomp($line);
+   my @params = split(' ', $line);
+   if( @params >= 3 ) {
+      my $printerName = shift(@params);
+      $targetPrinters{$printerName} = \@params;
+   }
+}
+close(PTL);
+
+##########################################
+# get the list of installed ipp printers #
+##########################################
+my %installedPrinters;
+my @implicitPrinters;
+
+open(LPS, "lpstat -v |");
+while( defined( my $line = <LPS> ) ){
+   if( $line =~ m/^device for (\S+): implicitclass:/ ) {
+      push @implicitPrinters, $1;
+   }
+   if( $line =~ m/^device for (\S+): ipps?:\/\/(\S+)\/printers\/(\S+)/ ){
+      $installedPrinters{$1} = [$2,$3];
+   }
+}
+close(LPS);
+
+################################
+# remove the implicit printers #
+################################
+foreach my $pname (@implicitPrinters) {
+   system("lpadmin -x $pname");
+}
+
+##################################
+# remove the installed printers  #
+# that are not in target         #
+# or if params change            #
+##################################
+my @targetPrintersNames = keys %targetPrinters;
+my @installedPrintersNames = keys %installedPrinters;
+foreach my $pname (@installedPrintersNames) {
+   if(  (! ( $pname ~~ @targetPrintersNames )) ||
+        ( $installedPrinters{$pname}[0] ne $targetPrinters{$pname}[0] ) ||
+        ( $installedPrinters{$pname}[1] ne $targetPrinters{$pname}[1] )
+     ) {
+      system("lpadmin -x $pname");
+   }
+}
+
+###########################
+# add the target printers #
+###########################
+foreach my $pname (@targetPrintersNames) {
+   # install if not exist #
+   if( ! ( $pname ~~ @installedPrintersNames ) ) {
+      system("lpadmin -p $pname -v ipp://$targetPrinters{$pname}[0]/printers/$targetPrinters{$pname}[1]");
+      system("cupsenable $pname");
+      system("cupsaccept $pname");
+   }
+   # set as default if needed #
+   if( defined( $targetPrinters{$pname}[2] ) ){
+      system("lpadmin -d $pname");
+   }
+}
+
+

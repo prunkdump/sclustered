@@ -1,0 +1,12 @@
+##################
+#puppet generated#
+##################
+<% @printers.each do |printerName,printerParams| -%>
+<% if printerParams.is_a?(String) -%>
+<%= printerName %>      <%= printerParams %> <%= printerName %><% if printerName == @default_printer %>        default<% end %>
+<% else -%>
+<%= printerName %>	<%= printerParams[0] %>	<%= printerParams[1] ? printerParams[1] : printerName %><% if printerName == @default_printer %>	default<% end %>
+<% end -%>
+<% end %>
+
+
