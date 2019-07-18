@@ -13,7 +13,7 @@ samba::quota_mount_point: /s4shares
 puppet::fai_debootstraps:
    fai-buster-amd64: [buster,amd64]
 puppet::fai_locale:
-   main: en_US.UTF8
+   main: en_US.UTF-8
    task: english
    keymap: us
    xkbmodel: pc105

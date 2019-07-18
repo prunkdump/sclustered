@@ -1,4 +1,4 @@
-PACKAGES aptitude
+PACKAGES install
 samba
 samba-dsdb-modules
 samba-vfs-modules
