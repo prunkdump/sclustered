@@ -42,10 +42,10 @@ node default {
    class { 'apt::client':
       stage => 'setup',
    }
-   #class { 'puppet::client':
-   #   stage => 'setup',
-   #   require => Class['apt::client'],
-   #}
+   class { 'puppet::client':
+      stage => 'setup',
+      require => Class['apt::client'],
+   }
    #class { 'concat::setup':
    #   stage => 'setup',
    #   require => Class['apt::client'],
