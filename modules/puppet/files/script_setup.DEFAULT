@@ -1,0 +1,5 @@
+#! /bin/bash
+
+# force updating the host keys #
+rm /etc/ssh/ssh_host_*
+dpkg-reconfigure openssh-server

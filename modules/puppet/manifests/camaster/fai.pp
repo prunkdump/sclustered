@@ -321,14 +321,12 @@ class puppet::camaster::fai {
 
 
    # ssh #
-   
-   # now fai regenerate the ssh keys
-   #file { '/srv/fai/config/hooks/setup.DEFAULT':
-   #   ensure => file,
-   #   source => 'puppet:///modules/puppet/script_setup.DEFAULT',
-   #   mode => '0755',
-   #   require => [Package['fai-quickstart'], File['/srv/fai/config']],
-   #}
+   file { '/srv/fai/config/hooks/setup.DEFAULT':
+      ensure => file,
+      source => 'puppet:///modules/puppet/script_setup.DEFAULT',
+      mode => '0755',
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
+   }
 
    exec { 'ensure_root_ssh_key':
       command => "ssh-keygen -t rsa -N '' -f /root/.ssh/id_rsa",
