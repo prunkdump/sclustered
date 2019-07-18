@@ -4,7 +4,7 @@
 fcopy -Bv /etc/samba/smb.conf
 
 # add libnss-winbind #
-sed 's/\(^\s*\(passwd\|group\):.*$\)/\1 winbind/' $target/etc/nsswitch.conf
+sed -i 's/\(^\s*\(passwd\|group\):.*$\)/\1 winbind/' $target/etc/nsswitch.conf
 
 # set realm #
 fcopy -Bv /etc/krb5.conf
