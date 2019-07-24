@@ -1,7 +1,7 @@
 class samba::member::config {
 
-   $realm = $samba::member::realm
-   $short_domain = $samba::member::short_domain
+   $samba_realm = $samba::member::realm
+   $samba_short_domain = $samba::member::short_domain
    $etc_path = $samba::member::etc_path   
 
    #######################

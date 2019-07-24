@@ -59,7 +59,7 @@ class samba::pam (
    #}
 
    # check winbind #
-   if $bind_module == 'winbind' {
+   #if $bind_module == 'winbind' {
 
       # fix bug for pam_winbind passwd #
       #file { '/usr/share/pam-configs/winbind':
@@ -91,6 +91,6 @@ class samba::pam (
       #   mode => '0660',
       #   #require => Exec['samba_create_keytab'],
       #}
-   }
+   #}
 
 }

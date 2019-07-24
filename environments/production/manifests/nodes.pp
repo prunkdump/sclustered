@@ -46,10 +46,10 @@ node default {
       stage => 'setup',
       require => Class['apt::client'],
    }
-   class { 'concat::setup':
-      stage => 'setup',
-      require => Class['apt::client'],
-   }
+   #class { 'concat::setup':
+   #   stage => 'setup',
+   #   require => Class['apt::client'],
+   #}
    class { ['samba','samba::member']:
       stage => 'setup',
       require => Class['apt::client'],
