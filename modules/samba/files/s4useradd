@@ -183,19 +183,21 @@ unset IFS
 # set primarySID corresponding to gid #
 #######################################
 
+# !! NOT NEEDED ANYMORE !! #
+
 #get the group sid from the gid
-strsid=$(wbinfo --gid-to-sid=$userGid)
-primarygid=$(echo $strsid | cut -d "-" -f 8)
+#strsid=$(wbinfo --gid-to-sid=$userGid)
+#primarygid=$(echo $strsid | cut -d "-" -f 8)
 
 
 # set the user primarySID
-echo "dn: CN=$userName,$userClassDN,$baseDN
-changetype: modify
-replace: primarygroupid
-primarygroupid: $primarygid" > /tmp/$userName
+#echo "dn: CN=$userName,$userClassDN,$baseDN
+#changetype: modify
+#replace: primarygroupid
+#primarygroupid: $primarygid" > /tmp/$userName
 
-ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
-rm /tmp/$userName
+#ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+#rm /tmp/$userName
 
 
 ############
