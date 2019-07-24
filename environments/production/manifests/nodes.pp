@@ -54,10 +54,10 @@ node default {
       stage => 'setup',
       require => Class['apt::client'],
    }
-   #class { ['pammount','nfs','nfs::client','nfs::client::dnsfmount']:
-   #   stage => 'setup',
-   #   require => Class['apt::client'],
-   #}
+   class { ['pammount','nfs','nfs::client','nfs::client::dnfsmount']:
+      stage => 'setup',
+      require => Class['apt::client'],
+   }
    #class { 'wine::client::setup':
    #   stage => 'setup',
    #}
