@@ -157,11 +157,10 @@ class samba::accountserver::config (
    include nfs::server
 
 
-   #!!! check !!!
    # local home share #
-   #nfs::server::nfs4export { "$home_path":
-   #   share => "/$home_share/${::hostname}",
-   #}
+   nfs::server::nfs4export { "$home_path":
+      share => "/$home_share/${::hostname}",
+   }
   
    # redirect remote homes #
    #samba::accountserver::config::server_redirection { $account_servers:
