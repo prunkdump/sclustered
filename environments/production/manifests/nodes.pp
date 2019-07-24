@@ -46,14 +46,14 @@ node default {
       stage => 'setup',
       require => Class['apt::client'],
    }
-   #class { 'concat::setup':
-   #   stage => 'setup',
-   #   require => Class['apt::client'],
-   #}
-   #class { ['samba','samba::member']:
-   #   stage => 'setup',
-   #   require => Class['apt::client'],
-   #}
+   class { 'concat::setup':
+      stage => 'setup',
+      require => Class['apt::client'],
+   }
+   class { ['samba','samba::member']:
+      stage => 'setup',
+      require => Class['apt::client'],
+   }
    #class { ['pammount','nfs','nfs::client','nfs::client::dnsfmount']:
    #   stage => 'setup',
    #   require => Class['apt::client'],

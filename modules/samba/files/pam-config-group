@@ -1,0 +1,6 @@
+Name: Grant group membership
+Default: yes
+Priority: 140
+Auth-Type: Additional
+Auth:
+	optional	pam_group.so

@@ -1,0 +1,15 @@
+[sssd]
+services = nss, pam
+config_file_version = 2
+domains = <%= @domain %>
+
+[nss]
+
+[pam]
+
+[domain/<%= @domain %>]
+
+id_provider = ad
+access_provider = ad
+ldap_id_mapping=false
+krb5_keytab=/etc/krb5.keytab
