@@ -6,18 +6,12 @@
 
 <pam_mount>
 
-<msg-authpw>Password :</msg-authpw>
-
-
                 <!-- debug should come before everything else,
                 since this file is still processed in a single pass
                 from top-to-bottom -->
 
 <debug enable="1" />
-
-                <!-- Volume definitions -->
-
+<msg-authpw>Password :</msg-authpw>
 <fusemount>mount.fuse.expanded %(VOLUME) %(MNTPT) -o %(OPTIONS)</fusemount>
 
-<mkmountpoint enable="1" remove="true" />
-
+                <!-- Volume definitions -->

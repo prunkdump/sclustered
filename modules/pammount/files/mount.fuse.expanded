@@ -1,0 +1,5 @@
+#! /bin/bash
+newArgs=$(echo $@ | sed "s|~|${HOME}|g")
+userPath=$(echo $newArgs | sed "s|=\(.*\)\$|| " | sed "s|^\(.*\)${HOME}\(.*\)\$|${HOME}\2|")
+mkdir -p $userPath
+mount.fuse $newArgs

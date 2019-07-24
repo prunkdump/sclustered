@@ -16,9 +16,13 @@
 -->
 <mntoptions require="nosuid,nodev" />
 
-<logout wait="0" hup="1" term="1" kill="1" />
+<!-- requires ofl from hxtools to be present -->
+<logout wait="0" hup="no" term="no" kill="no" />
+
 
                 <!-- pam_mount parameters: Volume-related -->
 
-</pam_mount>
+<mkmountpoint enable="1" remove="true" />
 
+
+</pam_mount>
