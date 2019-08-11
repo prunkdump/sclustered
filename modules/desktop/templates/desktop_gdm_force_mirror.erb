@@ -1,0 +1,258 @@
+#!/bin/bash
+
+get_serial_number () {
+
+   #####################
+   # get serial number #
+   #####################
+   local serialNumber=''
+   hexEDID=''
+   charEDID=''
+
+   IFS=''
+   while read line; do
+      line=$(echo $line | cut '-d ' -f2-)
+      hexPart=$(echo $line | sed 's/ >.*//')
+      charPart=$(echo $line | sed 's/^.* >\(.*\)</\1/')
+      hexEDID="${hexEDID}${hexPart}"
+      charEDID="${charEDID}${charPart}"
+   done < <(cat $1 | od -t x1z )
+   unset IFS
+
+   hexEDID=${hexEDID# }
+
+   # backup #
+   hexEDID_back=$hexEDID
+   charEDID_back=$charEDID
+
+   #-------------------------------------------#
+   # try to find serial in monitor descriptors #
+   #-------------------------------------------#
+
+   # 3 * 54 characters + 1 #
+   hexEDID=$(echo "$hexEDID" | cut -c 163-)
+   # 54 characters + 1 #
+   charEDID=$(echo "$charEDID" | cut -c 55-)
+
+
+   while [ ! -z "$hexEDID" ]; do
+      if $(echo "$hexEDID" | grep -q '^00 00 .. ff'); then
+         break
+      else
+         # 3*18 characters + 1 #
+         hexEDID=$(echo "$hexEDID" | cut -c 55-)
+         # 1 charecters + 1 #
+         charEDID=$(echo "$charEDID" | cut -c 19-)
+      fi
+   done
+
+
+   if [ ! -z "$charEDID" ]; then
+      hexEDID=$(echo "$hexEDID" | cut -c 16-)
+      charEDID=$(echo "$charEDID" | cut -c 6-)
+   fi
+
+
+   serialNumber=''
+
+   while read -n3 currHex; do
+      currHex=${currHex% }
+      if [[ "0x${currHex}" -ge "0x20" ]]; then
+         serialNumber="${serialNumber}${charEDID:0:1}"
+      else
+         break
+      fi
+      charEDID=$(echo "$charEDID" | cut -c 2-)
+   done < <(echo -n "$hexEDID")
+
+
+   #--------------------------------#
+   # else get the raw serial number #
+   #--------------------------------#
+   if [ -z "$serialNumber" ]; then
+      serialNumber=""
+      for hexDigit in ${hexEDID_back:36:12}; do
+         serialNumber="${hexDigit}${serialNumber}"
+      done
+      serialNumber="0x${serialNumber}"
+   fi
+
+   echo "$serialNumber"
+}
+
+
+get_vendor () {
+
+   local vendor=$(cat $1 | parse-edid 2>&1 | grep 'VendorName ' )
+   if echo "$vendor" | grep -q 'VendorName '; then
+      echo "$vendor" | sed 's/^.*VendorName "\(.*\)".*$/\1/'
+   else
+      echo ""
+   fi
+}
+
+
+get_product () {
+
+   local product=$(cat $1 | parse-edid 2>&1 | grep 'ModelName ' )
+   if echo "$product" | grep -q 'ModelName '; then
+      echo "$product" | sed 's/^.*ModelName "\(.*\)".*$/\1/'
+   else
+      echo ""
+   fi
+}
+
+
+get_binary_product () {
+
+   local binProduct=$(cat $1 | od -t x1 --skip-bytes=10 --read-bytes=2 | head -n 1)
+   local mainID=$(echo "$binProduct" | cut '-d ' -f3)
+   local subID=$(echo "$binProduct" | cut '-d ' -f2)
+   echo "0x${mainID}${subID}"
+}
+
+go_out () {
+   touch /var/lib/gdm3/.config/monitors.xml
+   touch /var/lib/gdm3/.config/monitors.xml.sh
+   chmod 755 /var/lib/gdm3/.config/monitors.xml.sh
+   exit 0
+}
+
+
+##########################################################
+
+#########
+# clean #
+#########
+rm -f /var/lib/gdm3/.config/monitors.xml
+rm -f /var/lib/gdm3/.config/monitors.xml.sh
+mkdir -p /var/lib/gdm3/.config
+
+
+###########
+# get def #
+###########
+if [ ! -e /var/lib/gdm3/.config/monitors.xml.def ]; then
+   go_out
+fi
+
+defLine=$(head -n 1 /var/lib/gdm3/.config/monitors.xml.def)
+screenWidth=$(echo "$defLine" | cut '-dx' -f1)
+screenHeight=$(echo "$defLine" | cut '-dx' -f2)
+if [ -z "$screenWidth" ] || [ -z "$screenWidth" ]; then
+   go_out
+fi
+
+
+################################
+# search for connected screens #
+################################
+connectedScreens=''
+
+while read line; do
+   stateFile="${line}/status"
+   edidFile="${line}/edid"
+   screenState=$(cat $stateFile)
+
+   unset outputName
+   unset vendor
+   unset product
+   unset serialNumber
+
+   # check if the screen is connected #
+   if [ "$screenState" == "connected" ]; then
+
+      # compute output name #
+      fullOutputName=$(basename ${line})
+      outputName=$(echo "$fullOutputName" | sed 's/^card.-//')
+      outputName=$(echo "$outputName" | sed 's/HDMI-.-\(.\)/HDMI-\1/')
+
+      # check if we can get info from edid #
+      if [ -e "$edidFile" ]; then
+         rawEdit=$(cat $edidFile | od)
+         if [ "$rawEdit" != "0000000" ]; then
+
+            # get parameters #
+            vendor=$(get_vendor $edidFile)
+            product=$(get_product $edidFile)
+            if [ -z "$product" ]; then
+               product=$(get_binary_product $edidFile)
+            fi
+            serialNumber=$(get_serial_number $edidFile)
+         fi
+      fi
+
+      # set unknown parameters #
+      if [ -z "$vendor" ]; then
+         vendor="unknown"
+      fi
+      if [ -z "$product" ]; then
+         product="unknown"
+      fi
+      if [ -z "$serialNumber" ]; then
+         serialNumber="unknown"
+      fi
+
+      # add result #
+      if [ ! -z "$outputName" ]; then
+         connectedScreens="${connectedScreens}$outputName,$vendor,$product,$serialNumber\n"
+      fi
+   fi
+done < <(find /sys/class/drm | grep 'card.-')
+
+
+
+#############################
+# build configuration files #
+#############################
+if [ ! -z "$connectedScreens" ]; then
+
+   # sort  #
+   IFS=''
+   connectedScreens=$(echo -e "$connectedScreens" | sort -t,)
+   unset IFS
+
+   # create script #
+   echo "#!/bin/bash
+sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
+
+   xrandrCommand="xrandr "
+
+   # echo header #
+   echo '<monitors version="1">
+  <configuration>
+    <clone>no</clone>' >> /var/lib/gdm3/.config/monitors.xml
+
+   # creates outputs #
+   IFS=''
+   while read line; do
+       outputName=$(echo "$line" | cut -d, -f1)
+       vendor=$(echo "$line" | cut -d, -f2)
+       product=$(echo "$line" | cut -d, -f3)
+       serialNumber=$(echo "$line" | cut -d, -f4)
+       if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ]; then
+          xrandrCommand="${xrandrCommand} --output ${outputName} --pos 0x0 --mode ${screenWidth}x${screenHeight} "
+          echo "    <output name=\"${outputName}\">
+      <vendor>${vendor}</vendor>
+      <product>${product}</product>
+      <serial>${serialNumber}</serial>
+      <width>${screenWidth}</width>
+      <height>${screenHeight}</height>
+      <x>0</x>
+      <y>0</y>
+    </output>" >> /var/lib/gdm3/.config/monitors.xml
+      fi
+   done < <(echo -e $connectedScreens)
+   unset IFS
+
+   # echo footer #
+   echo '  </configuration>
+</monitors>' >> /var/lib/gdm3/.config/monitors.xml
+
+   # create script #
+   echo "$xrandrCommand" >> /var/lib/gdm3/.config/monitors.xml.sh
+fi
+
+# done #
+go_out
+
