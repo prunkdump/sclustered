@@ -1,8 +1,8 @@
 class desktop::xfce::install {
 
-   #package { 'gdm':
-   #   ensure => absent,
-   #}
+   package { 'gdm3':
+      ensure => absent,
+   }
 
    #  !!!BUG!!! in stretch #
    # dbus hang in task-xfce-desktop #

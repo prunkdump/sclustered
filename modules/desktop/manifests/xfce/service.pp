@@ -1,9 +1,11 @@
 class desktop::xfce::service {
 
-  service { 'gdm':
-      ensure => stopped,
-      enable => false,
-   }
+   # uninstalled in install.pp #
+   #
+   #service { 'gdm':
+   #    ensure => stopped,
+   #    enable => false,
+   # }
 
    service { 'lightdm':
       ensure => running,

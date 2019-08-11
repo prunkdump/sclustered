@@ -14,6 +14,10 @@ class desktop::gnome::install {
    #   ensure => installed,
    #}
 
+   package { 'lightdm':
+      ensure => removed,
+   }
+
    package { 'task-gnome-desktop':
       ensure => installed,
       #require => [File['/etc/apt/preferences.d/gnome.pref'],Package['dbus']],
