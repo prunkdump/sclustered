@@ -15,7 +15,7 @@ class desktop::gnome::install {
    #}
 
    package { 'lightdm':
-      ensure => removed,
+      ensure => absent,
    }
 
    package { 'task-gnome-desktop':
