@@ -75,7 +75,7 @@ node default {
       require => Class['desktop'],
    }
    #class { 'virt': }
-   #class { 'localization': }
+   class { 'localization': }
 
    ###########
    # runtime #
