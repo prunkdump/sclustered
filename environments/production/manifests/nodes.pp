@@ -70,7 +70,7 @@ node default {
    class { 'cups': }
    ##class { 'check-quota': }
    class { 'keyboard': }
-   #class { 'shutdown': }
+   class { 'shutdown': }
    #class { 'mozilla':
    #   require => Class['desktop'],
    #}
