@@ -67,9 +67,9 @@ node default {
    ######## 
    #class { 'wifi': }
    class { 'desktop': }
-   #class { 'cups': }
+   class { 'cups': }
    ##class { 'check-quota': }
-   #class { 'keyboard': }
+   class { 'keyboard': }
    #class { 'shutdown': }
    #class { 'mozilla':
    #   require => Class['desktop'],
