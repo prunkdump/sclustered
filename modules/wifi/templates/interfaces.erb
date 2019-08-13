@@ -1,0 +1,8 @@
+source /etc/network/interfaces.d/*
+
+auto lo
+iface lo inet loopback
+
+<% @disabled_interfaces.each do |dinterface| -%>
+iface <%= dinterface %> inet static
+<% end -%>

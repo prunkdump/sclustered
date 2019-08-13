@@ -65,7 +65,7 @@ node default {
    ########
    # main #
    ######## 
-   #class { 'wifi': }
+   class { 'wifi': }
    class { 'desktop': }
    class { 'cups': }
    ##class { 'check-quota': }
