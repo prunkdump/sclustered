@@ -1,0 +1,6 @@
+class extrapkg::params {
+
+   $apps = []
+
+}
+

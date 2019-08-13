@@ -80,12 +80,12 @@ node default {
    ###########
    # runtime #
    ###########
-   #class { 'hostpkg':
-   #   stage => 'runtime',
-   #}
-   #class { 'extrapkg':
-   #   stage => 'runtime',
-   #}
+   class { 'hostpkg':
+      stage => 'runtime',
+   }
+   class { 'extrapkg':
+      stage => 'runtime',
+   }
    #class { 'wine::client':
    #   stage => 'runtime',
    #}
