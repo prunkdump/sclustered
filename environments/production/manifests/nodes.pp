@@ -71,9 +71,9 @@ node default {
    ##class { 'check-quota': }
    class { 'keyboard': }
    class { 'shutdown': }
-   #class { 'mozilla':
-   #   require => Class['desktop'],
-   #}
+   class { 'mozilla':
+      require => Class['desktop'],
+   }
    #class { 'virt': }
    #class { 'localization': }
 

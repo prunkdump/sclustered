@@ -1,0 +1,41 @@
+// Use LANG environment variable to choose locale
+pref("intl.locale.matchOS", true);
+
+// Disable default browser checking.
+pref("browser.shell.checkDefaultBrowser", false);
+
+//proxy
+<% if @http_proxy or @https_proxy -%>
+lockPref("network.proxy.type",1);
+<% if @http_proxy -%>
+lockPref("network.proxy.http","<%= @http_proxy_host %>");
+lockPref("network.proxy.http_port",<%= @http_proxy_port %>);
+<% end -%> 
+<% if @https_proxy -%>
+lockPref("network.proxy.ssl","<%= @https_proxy_host %>");
+lockPref("network.proxy.ssl_port",<%= @https_proxy_port %>);
+<% end -%>
+lockPref("network.proxy.no_proxies_on","localhost,127.0.0.1<% @no_proxy_list.each do |dest| %>,<%= dest %><% end %>");
+<% else -%>
+lockPref("network.proxy.type",0);
+<% end -%>
+
+<% if @cache_size -%>
+//cache size
+lockPref("browser.cache.disk.capacity", <%= @cache_size %>);
+lockPref("browser.cache.disk.smart_size.enabled",false);
+<% end -%>
+
+<% if @paper_size -%>
+//default paper size
+lockPref("print.postscript.paper_size","<%= @paper_size %>");
+<% end -%>
+
+<% if @start_page -%>
+//start page
+lockPref("browser.startup.homepage", "<%= @start_page %>");
+<% end -%>
+
+<% @firefox_prefs.each do |pref| -%>
+<%= pref %>
+<% end %>

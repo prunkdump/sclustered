@@ -1,0 +1,12 @@
+<% if @http_proxy or @https_proxy -%>
+deployment.proxy.type=1
+<% if @http_proxy -%>
+deployment.proxy.http.host=<%= @http_proxy_host %>
+deployment.proxy.http.port=<%= @http_proxy_port %>
+<% end -%>
+<% if @https_proxy -%>
+deployment.proxy.https.host=<%= @https_proxy_host %>
+deployment.proxy.https.port=<%= @https_proxy_port %>
+<% end -%>
+deployment.proxy.bypass.local=true
+<% end -%>
