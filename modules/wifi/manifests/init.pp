@@ -5,6 +5,8 @@ class wifi (
    $psk = $wifi::params::psk
 ) inherits wifi::params {
 
+   # use "wpa_passphrase <my_ssid>" to generate the password hash
+
    if $interface and $ssid and $psk {
 
       anchor { 'wifi::begin': } ->
