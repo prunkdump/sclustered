@@ -10,6 +10,8 @@ samba::home_path: /s4shares/home
 samba::profile_path: /s4shares/profile
 samba::share_path: /s4shares/share
 samba::quota_mount_point: /s4shares
+samba::sysvolrsync_password: 'us@se!sd$ac'
+puppet::puppetcarsync_password: 'oi-wm)tr!yu'
 puppet::fai_debootstraps:
    fai-buster-amd64: [buster,amd64]
 puppet::fai_locale:
