@@ -2,6 +2,7 @@
 network::slashform: 172.16.0.0/16
 network::gateway: 172.16.0.1
 nfs::daemon_count: 64
+samba::sysvolrsync_password: 'us@se!sd$ac'
 samba::domain: samdom.com
 samba::short_domain: SAMDOM
 samba::dns_forwarders:
@@ -10,7 +11,8 @@ samba::home_path: /s4shares/home
 samba::profile_path: /s4shares/profile
 samba::share_path: /s4shares/share
 samba::quota_mount_point: /s4shares
-samba::sysvolrsync_password: 'us@se!sd$ac'
+wine::serverpath: /s4shares/wine
+wine::winersync_password: 'is!wineP@ss'
 puppet::puppetcarsync_password: 'oi-wm)tr!yu'
 puppet::fai_debootstraps:
    fai-buster-amd64: [buster,amd64]

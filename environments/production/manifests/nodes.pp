@@ -14,7 +14,7 @@ node 'example_pdc.samdom.com' {
       disable_lpupdate => true,
    }
    #class { 'debbug::sambaserver': }
-   #class { 'wine::server': }
+   class { 'wine::server': }
 }
 
 node 'example_dc.samdom.com' {
