@@ -15,6 +15,12 @@ class wine::client::setup {
       # need multi arch #
       ###################
       include apt::client::multiarch
+   }
+
+
+   # shared wine prefixes are only needed when #
+   # some apps are enabled                     #
+   if ! empty($apps) {
 
       ##################################
       # pam mount shared wine prefixes #
