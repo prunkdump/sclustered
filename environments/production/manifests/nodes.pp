@@ -58,9 +58,9 @@ node default {
       stage => 'setup',
       require => Class['apt::client'],
    }
-   #class { 'wine::client::setup':
-   #   stage => 'setup',
-   #}
+   class { 'wine::client::setup':
+      stage => 'setup',
+   }
  
    ########
    # main #
@@ -87,9 +87,9 @@ node default {
    class { 'extrapkg':
       stage => 'runtime',
    }
-   #class { 'wine::client':
-   #   stage => 'runtime',
-   #}
+   class { 'wine::client':
+      stage => 'runtime',
+   }
    #class { 'debbug::client':
    #   stage => 'runtime',
    #}

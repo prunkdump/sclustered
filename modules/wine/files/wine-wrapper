@@ -1,0 +1,81 @@
+#!/bin/bash
+username=${USER}
+uid=$(id -u)
+app=$1
+currDir="/run/wine/${uid}/${app}"
+shift
+
+# update args #
+for arg in "$@"; do
+   newArg=$(echo $arg | sed "s|/run/wine|${currDir}|g")
+   newArgs=("${newArgs[@]}" "${newArg}")
+done
+
+#########################
+# customize wine prefix #
+#########################
+
+# drives #
+rm -f "$currDir/dosdevices/z:"
+rm -f "$currDir/dosdevices/d::"
+ln -s -f "$HOME" "$currDir/dosdevices/h:"
+ln -s -f "/media/${username}" "$currDir/dosdevices/p:"
+
+# profile #
+shellRegFound="false"
+
+while read -r line; do
+
+   # check shell reg beginning #
+   $(echo "$line" | grep -q '\[Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Explorer\\\\Shell\ Folders\]')
+   if [ "$?" -eq "0" ]; then
+      shellRegFound="true"
+      continue
+   fi
+
+   # check shell reg end #
+   if [ -z "$line" ]; then
+      shellRegFound="false"
+   fi
+
+   # parse line #
+   if [ "$shellRegFound" == "true" ]; then
+      echo "$line" | grep -q '^#'
+      if [ "$?" -ne "0" ]; then
+
+         # get folder name and forder target #
+         shellFolderName=$(echo -e "$line" | cut -d '"' -f2)
+         shellFolderTarget=$(echo -e "$line" | cut -d '"' -f4)
+
+         # convert target unix like #
+         shellFolderTarget=$(echo "$shellFolderTarget" | sed "s|C:|${currDir}/drive_c|")
+         shellFolderTarget=$(echo "$shellFolderTarget" | sed "s|\\\|/|g")
+
+         # convert to current user #
+         shellFolderTarget=$(echo "$shellFolderTarget" | sed "s|${currDir}/drive_c/users/[[:digit:]]*/|${currDir}/drive_c/users/${uid}/|")
+         shellFolderTarget=$(echo "$shellFolderTarget" | sed "s|${currDir}/drive_c/users/[a-z]*/|${currDir}/drive_c/users/${username}/|")
+
+         # check special folders #
+         if [ "$shellFolderName" == "Personal" ]; then
+            ln -s -f "$HOME" "$shellFolderTarget"
+         elif [ "$shellFolderName" == "Desktop" ]; then
+            ln -s -f "$HOME/Bureau" "$shellFolderTarget"
+         elif [ "$shellFolderName" == "My Music" ]; then
+            ln -s -f "$HOME/Musique" "$shellFolderTarget"
+         elif [ "$shellFolderName" == "My Pictures" ]; then
+            ln -s -f "$HOME/Images" "$shellFolderTarget"
+         elif [ "$shellFolderName" == "My Videos" ]; then
+            ln -s -f "$HOME/Vidéos" "$shellFolderTarget"
+         else
+            mkdir -p "$shellFolderTarget"
+         fi
+      fi
+   fi
+done < "$currDir/user.reg"
+
+
+#######
+# run #
+#######
+env WINEPREFIX="$currDir" wine "${newArgs[@]}"
+

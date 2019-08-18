@@ -1,6 +1,7 @@
 class wine::server (
    $serverpath = $wine::serverpath,
    $servergroup = $wine::servergroup,
+   $winesrv_dns = $wine::winesrv_dns,
    $winersync_password = $wine::winersync_password  
 ) inherits wine {
 
@@ -43,6 +44,12 @@ class wine::server (
       rsync::server::export { 'wine':
          path => "${serverpath}/",
          password => $winersync_password,
+      }
+
+      # ca service register #
+      samba::srvregister { "$winesrv_dns":
+         ensure => present,
+         require => Rsync::server::export ['wine'],
       }
    }
 }
