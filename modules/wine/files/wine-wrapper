@@ -2,7 +2,7 @@
 username=${USER}
 uid=$(id -u)
 app=$1
-currDir="/run/wine/${uid}/${app}"
+currDir="/run/wine/${uid}/prefixes/${app}"
 shift
 
 # update args #

@@ -35,7 +35,7 @@ class wine::client::setup {
       }
 
       pammount::mount { 'pam_mount_wine_unionfs':
-         mountpoint => '/run/wine/%(USERUID)',
+         mountpoint => '/run/wine/%(USERUID)/prefixes',
          #path => 'unionfs-fuse#~/.winediff=RW:/dnfs/wine=RO',
          path => 'unionfs-fuse#~/.winediff=RW:/wine=RO',
          fstype => 'fuse',
