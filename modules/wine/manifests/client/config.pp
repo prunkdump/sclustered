@@ -1,7 +1,7 @@
 class wine::client::config {
 
-   $winesrv_dns = $wine::client::winesrv_dns,
-   $winersync_password = $wine::client::winersync_password,
+   $winesrv_dns = $wine::client::winesrv_dns
+   $winersync_password = $wine::client::winersync_password
    $apps = $wine::client::apps
    $enabled = $wine::client::enabled
    $associate = $wine::client::associate

@@ -49,7 +49,7 @@ class wine::server (
       # ca service register #
       samba::srvregister { "$winesrv_dns":
          ensure => present,
-         require => Rsync::server::export ['wine'],
+         require => Rsync::Server::Export['wine'],
       }
    }
 }
