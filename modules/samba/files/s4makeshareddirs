@@ -369,7 +369,11 @@ WantedBy=multi-user.target
 done < <(s4ldbsearch -H $samDatabase -b $baseClassShareDN '(objectClass=user)'  dn cn gidNumber givenName description unixHomeDirectory memberOf)
 
 # reload nfs #
-exportfs -ra
+if which exportfs; then
+   exportfs -ra
+else
+   /usr/sbin/exportfs -ra
+fi
 
 ###################
 # clean if needed #
