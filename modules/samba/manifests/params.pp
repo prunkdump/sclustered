@@ -77,11 +77,11 @@ class samba::params {
    $common_drive = 'P:'
    $students_dir = 'students'
    $teachers_dir = 'teachers'
-   $teachers_common_dir = '__Teachers__'
-   $common_dir = '__Common__'
-   $resource_dir = '__Resource__'
-   $shared_dir = '__Share__'
-   $test_dir = '__Tests__'
+   $teachers_common_dir = 'Teachers'
+   $common_dir = 'Common'
+   $resource_dir = 'Resource'
+   $shared_dir = 'Share'
+   $test_dir = 'Tests'
    $common_mount_name = 'Common'
 
    # accounts parameters #
