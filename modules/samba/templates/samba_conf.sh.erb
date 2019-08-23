@@ -66,7 +66,7 @@ add:objectclass
 objectclass: posixGroup
 -
 add: gidnumber
-gidnumber: 100
+gidnumber: 5100000
 " > /tmp/Domain_Users.ldif
 
 ldbmodify -H <%= @private_path %>/sam.ldb /tmp/Domain_Users.ldif

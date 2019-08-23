@@ -49,7 +49,7 @@ s4classadd $newStudentClassName -b $studentsClassName
 s4shareadd ${resourceDirName,,} 1750,g:$teachersGroupName:rwx $newStudentClassName -c $newStudentClassName,$teachersClassName -n $resourceDirName
 
 #create shared share
-s4shareadd ${sharedDirName,,} 1770,g:$teachersGroupName:rwx,d:g:$teachersGroupName:rwx $newStudentClassName -c $newStudentClassName,$teachersClassName -n $sharedDirName
+s4shareadd ${sharedDirName,,} 1770,g:$teachersGroupName:rwx,d:g::r-x,d:g:$teachersGroupName:rwx $newStudentClassName -c $newStudentClassName,$teachersClassName -n $sharedDirName
 
 #create test folder
 s4shareadd ${testDirName,,} 770,g:$teachersGroupName:rwx,d:g::---,d:g:$newStudentClassGroup:---,d:o::---,d:g:$teachersGroupName:r-- $newStudentClassName -c $newStudentClassName,$teachersClassName -n $testDirName
