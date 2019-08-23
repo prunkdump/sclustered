@@ -227,4 +227,8 @@ unset IFS
 ############
 # ok
 ############
-echo "share created !"
+echo "Share created on AD !"
+echo "##################################################"
+echo "# !!! Launch s4makeshareddirs on the servers !!! #"
+echo "# !!! to create the network shares.          !!! #"
+echo "##################################################"
