@@ -13,7 +13,7 @@ node 'example_pdc.samdom.com' {
    class { 'cups':
       disable_lpupdate => true,
    }
-   #class { 'debbug::sambaserver': }
+   class { 'debbug::sambaserver': }
    class { 'wine::server': }
 }
 

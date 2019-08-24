@@ -1,0 +1,4 @@
+#!/bin/bash
+if [ $1 != "reload" ] && [ $1 != "reconfig" ]; then
+   /usr/sbin/rndc.ORIG "$@"
+fi
