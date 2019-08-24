@@ -67,15 +67,15 @@ class desktop::gnome::config {
    }
 
    # disable update dialog #
-   # don't works
-   #file { '02_updates.key':
-   #   path => '/etc/dconf/db/userbaseconf.d/02_updates.key',
-   #   ensure => file,
-   #   mode => '0644',
-   #   source => 'puppet:///modules/desktop/02_updates.key',
-   #   require => File['/etc/dconf/db/userbaseconf.d'],
-   #}
+   file { '02_updates.key':
+      path => '/etc/dconf/db/userbaseconf.d/02_updates.key',
+      ensure => file,
+      mode => '0644',
+      source => 'puppet:///modules/desktop/02_updates.key',
+      require => File['/etc/dconf/db/userbaseconf.d'],
+   }
 
+   # idle time #
    file { '02_idle_time.key':
       path => '/etc/dconf/db/userbaseconf.d/02_idle_time.key',
       ensure => file,
@@ -102,7 +102,15 @@ class desktop::gnome::config {
          ensure => absent,
       }
    }
-  
+
+   # numlock and event sound #
+   file { '04_peripherals.key':
+      path => '/etc/dconf/db/userbaseconf.d/04_peripherals.key',
+      ensure => file,
+      mode => '0644',
+      source => 'puppet:///modules/desktop/04_peripherals.key',
+      require => File['/etc/dconf/db/userbaseconf.d'],
+   }
 
    # lock it #
    file { 'userbaseconf.lock':
