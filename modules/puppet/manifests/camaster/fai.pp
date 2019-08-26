@@ -194,12 +194,14 @@ class puppet::camaster::fai {
    }
 
    # fai base config #
+   # exec permission is needed so apply to all files #
    file { '/srv/fai/config':
       ensure => directory,
       source => 'file:/usr/share/doc/fai-doc/examples/simple',
       recurse => true,
       purge => true,
       force => true,
+      mode => '0755',
       require => [Package['fai-quickstart'],File['/srv/fai']],
    }
 
