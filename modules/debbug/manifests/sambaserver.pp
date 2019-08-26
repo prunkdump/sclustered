@@ -6,7 +6,7 @@ class debbug::sambaserver {
    file { '/usr/sbin/rndc':
       ensure => present,
       source => 'puppet:///modules/debbug/rndc',
-      backup => '.ORIG'
+      backup => '.ORIG',
       mode => '0755',
    }
 
