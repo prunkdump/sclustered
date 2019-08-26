@@ -184,6 +184,7 @@ class puppet::camaster::fai {
       purge => true,
       force => true,
       recurselimit => 1,
+      require => Package['fai-quickstart'],
    }
 
    $debootstrap_list = keys($fai_debootstraps)
@@ -384,26 +385,31 @@ class puppet::camaster::fai {
    # fai hosts #
    #############
 
-   # !! fully managed !! #
-   file { '/srv/tftp/fai/pxelinux.cfg':
-      ensure => directory,
-      recurse => true,
-      purge => true,
-      force => true,
-   }
+   if ! empty($debootstrap_list) {
 
-   file { '/srv/tftp/fai/pxelinux.cfg/default':
-      ensure => present,
-   }
+      # !! fully managed !! #
+      file { '/srv/tftp/fai/pxelinux.cfg':
+         ensure => directory,
+         recurse => true,
+         purge => true,
+         force => true,
+         require => Puppet::Camaster::Fai::Debootstrap[$debootstrap_list],
+      }
 
-   # configure host #
-   $fai_hosts_list = keys($fai_hosts)
-   puppet::camaster::fai::faihost { $fai_hosts_list:
-      fai_hosts_hash => $fai_hosts,
-      fai_debootstraps_hash => $fai_debootstraps,
-      fai_host_file => '/srv/tftp/fai-hosts.conf',
-      server => $casrv_dns,
-      require => [Puppet::Camaster::Fai::Debootstrap[$debootstrap_list],File['/srv/tftp/fai/pxelinux.cfg','/srv/tftp/fai/pxelinux.cfg/default']],
+      file { '/srv/tftp/fai/pxelinux.cfg/default':
+         ensure => present,
+         require => Puppet::Camaster::Fai::Debootstrap[$debootstrap_list],
+      }
+
+      # configure host #
+      $fai_hosts_list = keys($fai_hosts)
+      puppet::camaster::fai::faihost { $fai_hosts_list:
+         fai_hosts_hash => $fai_hosts,
+         fai_debootstraps_hash => $fai_debootstraps,
+         fai_host_file => '/srv/tftp/fai-hosts.conf',
+         server => $casrv_dns,
+         require => [Puppet::Camaster::Fai::Debootstrap[$debootstrap_list],File['/srv/tftp/fai/pxelinux.cfg','/srv/tftp/fai/pxelinux.cfg/default']],
+      }
    }
 
    #############
