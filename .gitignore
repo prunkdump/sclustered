@@ -1,9 +1,6 @@
 auth.conf
 code
 puppet.conf
-hieradata/hostname/*
-hieradata/hostnumber/*
-hieradata/room/*
 environments/production/modules/concat
 environments/production/modules/stdlib
 modules/concat
