@@ -16,9 +16,9 @@ class apt::server::config {
    if $http_proxy or $https_proxy {
       $http_proxy_status = present
       if $http_proxy {
-         $http_proxy_target = $http_proxy
+         $http_proxy_target = "http://$http_proxy"
       } else {
-         $http_proxy_target = $https_proxy
+         $http_proxy_target = "https://$https_proxy"
       }
    } else {
       $http_proxy_status = absent
