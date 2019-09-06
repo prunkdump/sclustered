@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# delay to wait device power on #
+sleep 5
+
+# get gdm uid #
+gdmUid=$(id -u Debian-gdm)
+
 get_serial_number () {
 
    #####################
@@ -209,7 +215,7 @@ done < <(find /sys/class/drm | grep 'card.-')
 numTry="0"
 getRandr="false"
 while [ "$numTry" -ne "5" ] && [ "$getRandr" != "true" ]; do
-   verboseRandr=$(env DISPLAY=':0' XAUTHORITY='/run/user/120/gdm/Xauthority' xrandr-verbose 2>/dev/null)
+   verboseRandr=$(env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" xrandr-verbose 2>/dev/null)
    if [ "$?" -eq "0" ]; then
       getRandr="true"
    else
@@ -324,6 +330,10 @@ sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
    # create script #
    echo "$xrandrCommand" >> /var/lib/gdm3/.config/monitors.xml.sh
 fi
+
+# execute now for :0 #
+env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" $xrandrCommand
+
 
 # done #
 go_out
