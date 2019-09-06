@@ -201,15 +201,77 @@ while read line; do
 done < <(find /sys/class/drm | grep 'card.-')
 
 
+####################
+# get refresh rate #
+####################
+
+# read verbose randr output #
+numTry="0"
+getRandr="false"
+while [ "$numTry" -ne "5" ] && [ "$getRandr" != "true" ]; do
+   verboseRandr=$(env DISPLAY=':0' XAUTHORITY='/run/user/120/gdm/Xauthority' xrandr-verbose 2>/dev/null)
+   if [ "$?" -eq "0" ]; then
+      getRandr="true"
+   else
+      sleep 5
+      numTry=$((numTry+1))
+   fi
+   IFS=''
+   verboseRandr=$(echo -e $verboseRandr | sed 's/\(\*\|\+\)//g')
+   unset IFS
+done
+
+if [ "$getRandr" != "true" ]; then
+   exit 0
+fi
+
+# add refresh rate to list #
+connectedScreensWithRate=''
+
+IFS=''
+while read line; do
+   outputName=$(echo "$line" | cut -d, -f1)
+   vendor=$(echo "$line" | cut -d, -f2)
+   product=$(echo "$line" | cut -d, -f3)
+   serialNumber=$(echo "$line" | cut -d, -f4)
+   if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ]; then
+
+      # search for freq #
+      outputFound="false"
+      while read randrLine; do
+         if echo $randrLine | grep -q "^ "; then
+
+            # mode line #
+            if [ "$outputFound" == "true" ]; then
+               if echo $randrLine | grep -q " *${screenWidth}x${screenHeight}"; then
+                  modeFreq=$(echo $randrLine | tr -s ' ' | cut -d' ' -f3)
+                  connectedScreensWithRate="${line},${modeFreq}\n${connectedScreensWithRate}"
+                  break
+               fi
+            fi
+
+         else
+
+            # outpout line #
+            if echo $randrLine | grep -q "^${outputName} "; then
+               outputFound="true"
+            else
+               outputFound="false"
+            fi
+         fi
+      done < <(echo -e $verboseRandr)
+   fi
+done < <(echo -e $connectedScreens)
+unset IFS
 
 #############################
 # build configuration files #
 #############################
-if [ ! -z "$connectedScreens" ]; then
+if [ ! -z "$connectedScreensWithRate" ]; then
 
    # sort  #
    IFS=''
-   connectedScreens=$(echo -e "$connectedScreens" | sort -t,)
+   connectedScreensWithRate=$(echo -e "$connectedScreensWithRate" | sort -t,)
    unset IFS
 
    # create script #
@@ -219,9 +281,13 @@ sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
    xrandrCommand="xrandr "
 
    # echo header #
-   echo '<monitors version="1">
+   echo '<monitors version="2">
   <configuration>
-    <clone>no</clone>' >> /var/lib/gdm3/.config/monitors.xml
+    <logicalmonitor>
+      <x>0</x>
+      <y>0</y>
+      <scale>1</scale>
+      <primary>yes</primary>' > /var/lib/gdm3/.config/monitors.xml
 
    # creates outputs #
    IFS=''
@@ -230,23 +296,29 @@ sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
        vendor=$(echo "$line" | cut -d, -f2)
        product=$(echo "$line" | cut -d, -f3)
        serialNumber=$(echo "$line" | cut -d, -f4)
-       if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ]; then
+       rate=$(echo "$line" | cut -d, -f5)
+       if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ] && [ ! -z "$rate" ]; then
           xrandrCommand="${xrandrCommand} --output ${outputName} --pos 0x0 --mode ${screenWidth}x${screenHeight} "
-          echo "    <output name=\"${outputName}\">
-      <vendor>${vendor}</vendor>
-      <product>${product}</product>
-      <serial>${serialNumber}</serial>
-      <width>${screenWidth}</width>
-      <height>${screenHeight}</height>
-      <x>0</x>
-      <y>0</y>
-    </output>" >> /var/lib/gdm3/.config/monitors.xml
+          echo "      <monitor>
+        <monitorspec>
+          <connector>${outputName}</connector>
+          <vendor>${vendor}</vendor>
+          <product>${product}</product>
+          <serial>${serialNumber}</serial>
+        </monitorspec>
+        <mode>
+          <width>${screenWidth}</width>
+          <height>${screenHeight}</height>
+          <rate>${rate}</rate>
+        </mode>
+      </monitor>" >> /var/lib/gdm3/.config/monitors.xml
       fi
-   done < <(echo -e $connectedScreens)
+   done < <(echo -e $connectedScreensWithRate)
    unset IFS
 
    # echo footer #
-   echo '  </configuration>
+   echo '    </logicalmonitor>
+  </configuration>
 </monitors>' >> /var/lib/gdm3/.config/monitors.xml
 
    # create script #
@@ -255,4 +327,3 @@ fi
 
 # done #
 go_out
-

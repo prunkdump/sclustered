@@ -30,6 +30,12 @@ class desktop::display (
          ensure => installed,
       }
 
+      file { '/usr/bin/xrandr-verbose':
+         ensure => file,
+         mode => '0755',
+         source => 'puppet:///modules/desktop/xrandr-verbose',
+      }
+
       file { 'desktop_gdm_force_mirror':
          path => '/usr/sbin/desktop_gdm_force_mirror',
          ensure => file,
@@ -47,7 +53,7 @@ class desktop::display (
 
       exec { 'desktop_gdm_force_mirror':
          path => '/usr/bin:/usr/sbin:/bin',
-         subscribe => [Package['read-edid'],File['desktop_gdm_force_mirror'],File['desktop_gdm_force_mirror_conf_file']],
+         subscribe => [Package['read-edid'],File['/usr/bin/xrandr-verbose','desktop_gdm_force_mirror','desktop_gdm_force_mirror_conf_file']],
          refreshonly => true,
       }
 

@@ -7,9 +7,10 @@ class desktop::gnome::service {
    #   enable => false,
    #}
 
-   service { 'gdm':
-      ensure => running,
-      enable => true,
-      subscribe => Class['desktop::service'],
-   }
+   # !!! BUG gdm failed to restart !!! # 
+   #service { 'gdm':
+   #   ensure => running,
+   #   enable => true,
+   #   subscribe => Class['desktop::service'],
+   #}
 }
