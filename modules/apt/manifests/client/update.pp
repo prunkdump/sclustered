@@ -21,9 +21,10 @@ class apt::client::update {
       ensure => present,
    }
 
+   # update all packages except puppet, will be upgraded with unattended upgrades #
    exec { 'debian_automated_distupgrade':
       path => '/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin',
-      command => "echo 'puppet hold' | dpkg --set-selections && env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=mail apt-get dist-upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' && echo 'puppet install' | dpkg --set-selections && env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=mail apt-get dist-upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold'",
+      command => "echo 'puppet hold' | dpkg --set-selections && env DEBIAN_FRONTEND=noninteractive APT_LISTCHANGES_FRONTEND=mail apt-get dist-upgrade -y -o Dpkg::Options::='--force-confdef' -o Dpkg::Options::='--force-confold' && echo 'puppet install' | dpkg --set-selections",
       require => [Exec['apt-get update'],File['/usr/sbin/policy-rc.d'],Package['lsb-release']],
       unless => "lsb_release -c | grep $distribution",
       timeout => 0,
