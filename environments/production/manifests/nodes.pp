@@ -90,7 +90,7 @@ node default {
    class { 'wine::client':
       stage => 'runtime',
    }
-   #class { 'debbug::client':
-   #   stage => 'runtime',
-   #}
+   class { 'debbug::client':
+      stage => 'runtime',
+   }
 }

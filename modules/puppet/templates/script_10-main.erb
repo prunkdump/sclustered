@@ -40,6 +40,8 @@ chmod 644 $target/etc/ssh/ssh_host_*_key.pub
 # enable the puppet agent #
 sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = <%= @casrv_dns %>/' $target/etc/puppet/puppet.conf
 sed -i 's/^\s*\[main\]\s*$/[main]\nserver = <%= @mastersrv_dns %>/' $target/etc/puppet/puppet.conf
+# BUG puppet start before network
+sed -i 's/^Documentation=\(.*\)$/Documentation=\1\nAfter=network.target network-online.target remote-fs.target systemd-networkd.service NetworkManager.service/' $target/lib/systemd/system/puppet.service
 $ROOTCMD puppet agent --enable
 $ROOTCMD systemctl enable puppet
 
