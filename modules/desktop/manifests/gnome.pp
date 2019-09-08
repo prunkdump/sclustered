@@ -10,7 +10,7 @@ class desktop::gnome (
    anchor { 'desktop::gnome::begin': } ->
    class { 'desktop::gnome::install': } ->
    class { 'desktop::gnome::config': } ~>
-   class { 'desktop::gnome::dconf': } ~>
+   class { 'desktop::gnome::dconf': } -> #signal disabled : gdm can't restart
    class { 'desktop::gnome::service': } ->
    anchor { 'desktop::gnome::end': }
    

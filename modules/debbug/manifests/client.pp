@@ -2,6 +2,7 @@ class debbug::client {
 
    # BUG gdm failed to restart #
    # see modules/desktop/manifests/gnome/service.pp
+   # and modules/desktop/manifests/gnome.pp 
 
    # BUG puppet start before network is online
    # see also modules/puppet/templates/script_10-main.erb
