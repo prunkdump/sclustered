@@ -270,15 +270,32 @@ while read line; do
 done < <(echo -e $connectedScreens)
 unset IFS
 
+
+# sort the list in same order than xrandr #
+
+sortedOutputList=''
+IFS=''
+while read randrLine; do
+   if echo $randrLine | grep -q "^.* connected "; then
+      randrOutputName=$(echo $randrLine | cut -d' ' -f1)
+      fullOutputLine=$(echo -e $connectedScreensWithRate | grep "^${randrOutputName},")
+      if [ "$?" -eq "0" ]; then
+         if [ -z "$sortedOutputList" ]; then
+            sortedOutputList="$fullOutputLine"
+         else
+            sortedOutputList="$sortedOutputList\n$fullOutputLine"
+         fi
+      fi
+   fi
+done < <(echo -e $verboseRandr)
+unset IFS
+
+connectedScreensWithRate="$sortedOutputList"
+
 #############################
 # build configuration files #
 #############################
 if [ ! -z "$connectedScreensWithRate" ]; then
-
-   # sort  #
-   IFS=''
-   connectedScreensWithRate=$(echo -e "$connectedScreensWithRate" | sort -t,)
-   unset IFS
 
    # create script #
    echo "#!/bin/bash
