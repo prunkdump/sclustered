@@ -203,7 +203,7 @@ while read searchLine; do
                else
                   # check if the gid is correct #
                   #!! can't use id on DC to get gidNumber as it always return Domain Users !!#
-                  currentUserGid=$(getent group $userClassGroup | cut -d: -f3)
+                  currentUserGid=$(getent group "$shortDomain\\$userClassGroup" | cut -d: -f3)
                   currentDirGid=$(stat -c "%g" $unixHomePath/$userName)
                   if [ "$currentUserGid" -ne "$currentDirGid" ]; then
 
