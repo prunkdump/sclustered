@@ -41,10 +41,9 @@ chmod 644 $target/etc/ssh/ssh_host_*_key.pub
 sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = <%= @casrv_dns %>/' $target/etc/puppet/puppet.conf
 sed -i 's/^\s*\[main\]\s*$/[main]\nserver = <%= @mastersrv_dns %>/' $target/etc/puppet/puppet.conf
 # BUG puppet start before network
-sed -i 's/^Documentation=\(.*\)$/Documentation=\1\nAfter=network.target network-online.target remote-fs.target systemd-networkd.service NetworkManager.service/' $target/lib/systemd/system/puppet.service
+if ! grep -q "After=" $target/lib/systemd/system/puppet.service; then
+   sed -i 's/^Documentation=\(.*\)$/Documentation=\1\nAfter=network.target network-online.target remote-fs.target systemd-networkd.service NetworkManager.service/g' $target/lib/systemd/system/puppet.service
+fi
+
 $ROOTCMD puppet agent --enable
 $ROOTCMD systemctl enable puppet
-
-# !!!BUG!!!? #
-# start puppet after network #
-#sed -i "s/Documentation=man:puppet-agent(8)/Documentation=man:puppet-agent(8)\nWants=network-online.target\nAfter=network-online.target/g" $target/lib/systemd/system/puppet.service

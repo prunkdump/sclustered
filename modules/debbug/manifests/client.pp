@@ -16,5 +16,11 @@ class debbug::client {
       ensure => present,
    }
 
+   exec { 'puppet-service-daemon-reload':
+      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      command => 'systemctl daemon-reload',
+      refreshonly => true,
+      subscribe => File_option['start_puppet_after_network'],
+   }
 
 }
