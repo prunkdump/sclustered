@@ -11,9 +11,9 @@ class desktop::gnome (
 
    anchor { 'desktop::gnome::begin': } ->
    class { 'desktop::gnome::install': } ->
-   class { 'desktop::gnome::config-dconf': } ~>
+   class { 'desktop::gnome::configdconf': } ~>
    class { 'desktop::gnome::dconf': } ->
-   class { 'desktop::gnome::config-gdm': } ~>
+   class { 'desktop::gnome::configgdm': } ~>
    class { 'desktop::gnome::service': } ->
    class { 'desktop::gnome::display': } ->
    anchor { 'desktop::gnome::end': }

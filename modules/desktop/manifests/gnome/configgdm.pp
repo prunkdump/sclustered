@@ -1,4 +1,4 @@
-class desktop::gnome::config-gdm {
+class desktop::gnome::configgdm {
 
    $force_mirror = $desktop::gnome::force_mirror
    $disable_wayland = $desktop::gnome::disable_wayland

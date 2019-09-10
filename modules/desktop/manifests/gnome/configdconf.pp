@@ -1,4 +1,4 @@
-class desktop::gnome::config-dconf {
+class desktop::gnome::configdconf {
 
    $dash_apps = $desktop::gnome::dash_apps
    $extensions = $desktop::gnome::extensions
