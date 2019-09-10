@@ -1,7 +1,8 @@
 auth.conf
 code
 puppet.conf
-environments/production/modules/concat
-environments/production/modules/stdlib
+environments/production/modules
 modules/concat
 modules/stdlib
+modules/extrapkg/files/pkg/*
+!modules/extrapkg/files/pkg/README
