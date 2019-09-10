@@ -88,36 +88,36 @@ class extrapkg (
    ###############
    # flashplayer #
    ###############
-   #if 'flashplayer' in $apps {
-   #   $flashplayer_status = 'present'
-   #}
-   #else {
-   #   $flashplayer_status = 'absent'
-   #}
-   #
-   #file { '/usr/sbin/fireflashupdate':
-   #   ensure => $flashplayer_status,
-   #   source => 'puppet:///modules/extrapkg/fireflashupdate.sh',
-   #   mode => '0744',
-   #}
-   #
-   #if $flashplayer_status == present  {
-   #   exec { 'fireflashupdate':
-   #      path => '/usr/bin:/usr/sbin:/bin',
-   #      require => File['/usr/sbin/fireflashupdate'],
-   #      subscribe => File['/usr/sbin/fireflashupdate'],
-   #      refreshonly => true,
-   #   }
-   #}
-   #
+   if 'flashplayer' in $apps {
+      $flashplayer_status = 'present'
+   }
+   else {
+      $flashplayer_status = 'absent'
+   }
+   
+   file { '/usr/sbin/fireflashupdate':
+      ensure => $flashplayer_status,
+      source => 'puppet:///modules/extrapkg/fireflashupdate.sh',
+      mode => '0744',
+   }
+   
+   if $flashplayer_status == present  {
+      exec { 'fireflashupdate':
+         path => '/usr/bin:/usr/sbin:/bin',
+         require => File['/usr/sbin/fireflashupdate'],
+         subscribe => File['/usr/sbin/fireflashupdate'],
+         refreshonly => true,
+      }
+   }
+   
    # cron job to update  #
-   #file { 'update-flashplugin':
-   #   path => '/etc/cron.daily/update-flashplugin',
-   #   ensure => $flashplayer_status,
-   #   source => 'puppet:///modules/extrapkg/update-flashplugin',
-   #   mode => '0755',
-   #   require => File['/usr/sbin/fireflashupdate'],
-   #}
+   file { 'update-flashplugin':
+      path => '/etc/cron.daily/update-flashplugin',
+      ensure => $flashplayer_status,
+      source => 'puppet:///modules/extrapkg/update-flashplugin',
+      mode => '0755',
+      require => File['/usr/sbin/fireflashupdate'],
+   }
 
 
    ##########
