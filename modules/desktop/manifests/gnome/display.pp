@@ -1,27 +1,12 @@
-class desktop::display (
-   $force_mirror = undef, 
-   $disable_wayland = false
-) {
+class desktop::gnome::display {
 
+   $force_mirror = $desktop::gnome::force_mirror
 
-   #####################
-   # disable wayland ? #
-   #####################
-   if $force_mirror or $disable_wayland == true {
-      $wayland_line = 'WaylandEnable=false'
-   } else {
-      $wayland_line = '#WaylandEnable=false'
-   }
+   ################
+   # force mirror #
+   ################
 
-   # disable Wayland #
-   file_line { 'gdm_disable_wayland':
-      path => '/etc/gdm3/daemon.conf',
-      line => "$wayland_line",
-      match => 'WaylandEnable',
-      ensure => present,
-      multiple => false,
-   }
-
+   # restart gdm is not needed #
  
    if $force_mirror { 
 
@@ -51,11 +36,20 @@ class desktop::display (
          mode => '0644',
       }
 
-      exec { 'desktop_gdm_force_mirror':
+      exec { 'desktop_gdm_force_mirror_refresh':
+         command => 'desktop_gdm_force_mirror',
          path => '/usr/bin:/usr/sbin:/bin',
          subscribe => [Package['read-edid'],File['/usr/bin/xrandr-verbose','desktop_gdm_force_mirror','desktop_gdm_force_mirror_conf_file']],
          refreshonly => true,
       }
+
+      exec { 'desktop_gdm_force_mirror_conf_file':
+         command => 'desktop_gdm_force_mirror',
+         path => '/usr/bin:/usr/sbin:/bin',
+         creates => '/var/lib/gdm3/.config/monitors.xml',
+         require => Exec['desktop_gdm_force_mirror_refresh'],
+      }
+      
 
       file { '/etc/xdg/autostart/setupxorg.desktop':
          ensure => file,

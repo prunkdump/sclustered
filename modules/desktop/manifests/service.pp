@@ -8,9 +8,11 @@ class desktop::service {
    #   enable => false,
    #}
    #
-   #service { 'avahi-daemon':
-   #   ensure => running,
-   #   enable => true,
-   #}
 
+   if defined( Class['desktop::gnome'] ) or defined( Class['desktop::xfce'] ) {
+      service { 'avahi-daemon':
+         ensure => running,
+         enable => true,
+      }
+   }
 }

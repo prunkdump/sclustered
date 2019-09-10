@@ -8,6 +8,8 @@ class desktop (
    case $environment {
       'gnome': { 
          class { 'desktop::gnome':
+            force_mirror => $force_mirror,
+            disable_wayland => $disable_wayland,
             require => Anchor['desktop::begin'],
             before => Anchor['desktop::end'],
          }
@@ -22,7 +24,9 @@ class desktop (
 
       }
       default : { 
-         class { 'desktop::gnome': 
+         class { 'desktop::gnome':
+            force_mirror => $force_mirror,
+            disable_wayland => $disable_wayland,
             require => Anchor['desktop::begin'],
             before => Anchor['desktop::end'],
          }
@@ -30,10 +34,6 @@ class desktop (
    }
    class { 'desktop::install': }->
    class { 'desktop::config': }~>
-   class { 'desktop::display':
-      force_mirror => $force_mirror,
-      disable_wayland => $disable_wayland,
-   }~>
    class { 'desktop::service': }->
    anchor { 'desktop::end': } 
 }

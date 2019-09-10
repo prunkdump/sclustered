@@ -8,6 +8,7 @@ class desktop::gnome::service {
    #}
 
    # !!! BUG gdm failed to restart !!! # 
+   # refresh only when disable wayland #
    service { 'gdm':
       ensure => running,
       enable => true,

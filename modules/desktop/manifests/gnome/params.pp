@@ -8,5 +8,6 @@ class desktop::gnome::params {
    $autologout_time = undef
    $http_proxy = $::network::http_proxy
    $https_proxy = $::network::https_proxy
-
+   $force_mirror = undef
+   $disable_wayland = false
 }

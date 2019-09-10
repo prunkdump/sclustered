@@ -1,4 +1,4 @@
-class desktop::gnome::config {
+class desktop::gnome::config-dconf {
 
    $dash_apps = $desktop::gnome::dash_apps
    $extensions = $desktop::gnome::extensions
@@ -118,15 +118,6 @@ class desktop::gnome::config {
       ensure => file,
       mode => '0644',
       source => 'puppet:///modules/desktop/userbaseconf.lock',
-   }
-
-   # disable user list #
-   file_line { "gdm_disable_user_list":
-      path => '/etc/gdm3/greeter.dconf-defaults',
-      line => 'disable-user-list=true',
-      match => 'disable-user-list',
-      ensure => present,
-      multiple => false,
    }
 
 }
