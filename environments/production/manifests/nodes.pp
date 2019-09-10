@@ -29,7 +29,7 @@ node 'example_dc.samdom.com' {
 }
 
 
-node default {
+node change_to__default__ {
 
    include stdlib
  
