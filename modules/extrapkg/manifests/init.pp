@@ -123,27 +123,27 @@ class extrapkg (
    ##########
    # libdvd #
    ##########
-   #if 'libdvd' in $apps {
-   #   $libdvd_status = 'present'
-   #}
-   #else {
-   #   $libdvd_status = 'absent'
-   #}
-   #
-   #package { 'libdvd-pkg':
-   #   ensure => $libdvd_status,
-   #}
-   #
-   #if $libdvd_status == 'present' {
-   #
-   #   exec {'install_libdvd_pkg':
-   #      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-   #      #logoutput => true,
-   #      command => '/usr/lib/libdvd-pkg/b-i_libdvdcss.sh',
-   #      subscribe => Package['libdvd-pkg'],
-   #      refreshonly => true,
-   #   }
-   #
-   #}
+   if 'libdvd' in $apps {
+      $libdvd_status = 'present'
+   }
+   else {
+      $libdvd_status = 'absent'
+   }
+   
+   package { 'libdvd-pkg':
+      ensure => $libdvd_status,
+   }
+   
+   if $libdvd_status == 'present' {
+   
+      exec {'install_libdvd_pkg':
+         path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+         #logoutput => true,
+         command => '/usr/lib/libdvd-pkg/b-i_libdvdcss.sh',
+         subscribe => Package['libdvd-pkg'],
+         refreshonly => true,
+      }
+   
+   }
    
 }
