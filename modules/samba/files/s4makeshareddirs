@@ -24,6 +24,65 @@ function ask_yes_or_no() {
 }
 
 
+
+###########################
+# function to prefix acls #
+###########################
+function prefixAcls {
+
+   # backup IFS #
+   IFS_BACK="$IFS"
+   IFS=","
+   prefixedAcls=''
+
+   for acl in $1; do
+
+      # check if we have acl #
+      if [ ! -z "$acl" ]; then
+
+         # first acl ? #
+         if [ ! -z "$prefixedAcls" ]; then
+            prefixedAcls="${prefixedAcls},"
+         fi
+
+         # check if default acls #
+         if echo "$acl" | grep -q '^d:'; then
+            prefixedAcls="${prefixedAcls}d:"
+            acl=${acl#d:}
+         fi
+
+         # check if reconize acl #
+         if echo "$acl" | grep -q '^[ug]:.*:[r-][w-][x-]'; then
+            aclType=$(echo "$acl" | cut -d: -f1)
+            aclTarget=$(echo "$acl" | cut -d: -f2)
+            aclRights=$(echo "$acl" | cut -d: -f3)
+
+
+            # if target not empty #
+            if [ ! -z "$aclTarget" ]; then
+
+               # if target not prefixed #
+               if ! echo "$aclTarget" | grep -q '\\'; then
+                  aclTarget="${shortDomain}\\\\${aclTarget}"
+               fi
+            fi
+            prefixedAcls="${prefixedAcls}${aclType}:${aclTarget}:${aclRights}"
+
+         else
+            # let the acl as it #
+            prefixedAcls="${prefixedAcls}${acl}"
+         fi
+      fi
+   done
+
+   # restore IFS #
+   IFS="$IFS_BACK"
+   echo "$prefixedAcls"
+}
+
+
+
+
 ###########
 #parse args
 ###########
@@ -190,13 +249,13 @@ while read searchLine; do
             if [ -e "$unixHomePath/$userName" ]; then
 
                # check if the uid is correct #
-               currentUserUid=$(id -u $userName)
+               currentUserUid=$(id -u "$shortDomain\\$userName")
                currentDirUid=$(stat -c "%u" $unixHomePath/$userName)
                if [ "$currentUserUid" -ne "$currentDirUid" ]; then
 
                   # bad uid ! this must be an old user dir, delete or restore #
                   oldHomeDirs="${oldHomeDirs} $unixHomePath/$userName"
-                  chown $userName:$userClassGroup $unixHomePath/$userName
+                  chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
                   setfacl -b $unixHomePath/$userName
                   setfacl -k $unixHomePath/$userName
 
@@ -209,16 +268,16 @@ while read searchLine; do
 
                      # bad gid ! may the user's class have changed #
                      echo "Seems the ${userName}'s class have changed, restoring rights ..."
-                     chown -R $userName:$userClassGroup $unixHomePath/$userName
-                     setfacl -R -b $unixHomePath/$userName
-                     setfacl -R -k $unixHomePath/$userName
+                     chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
+                     setfacl -b $unixHomePath/$userName
+                     setfacl -k $unixHomePath/$userName
                   fi
                fi
             fi
 
             # create dirs #
             if ! touchDir $unixHomePath/$userName; then
-               chown $userName:$userClassGroup $unixHomePath/$userName
+               chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
                chmod 700 $unixHomePath/$userName
                setfacl -b $unixHomePath/$userName
                setfacl -k $unixHomePath/$userName
@@ -303,12 +362,22 @@ while read searchLine; do
 
             # share directory #
             if ! touchDir $unixSharePath/$shareName; then
-               chown $shareOwner $unixSharePath/$shareName
+               shareOwnerUser=$(echo "$shareOwner" | cut -d: -f1)
+               shareOwnerGroup=$(echo "$shareOwner" | cut -d: -f2)
+               if [ "$shareOwnerUser" != "root" ]; then
+                  shareOwnerUser="$shortDomain\\$shareOwnerUser"
+               fi
+               if [ "$shareOwnerGroup" != "root" ]; then
+                  shareOwnerGroup="$shortDomain\\$shareOwnerGroup"
+               fi
+               chown "$shareOwnerUser:$shareOwnerGroup" $unixSharePath/$shareName
                chmod $shareMod $unixSharePath/$shareName
                setfacl -b $unixSharePath/$shareName
                setfacl -k $unixSharePath/$shareName
                if [ ! -z "$shareAcls" ]; then
-                  setfacl -m $shareAcls $unixSharePath/$shareName
+                  prefixedShareAcls=$(prefixAcls "$shareAcls")
+                  setfacl -m $prefixedShareAcls $unixSharePath/$shareName
+                  echo "setfacl -m $prefixedShareAcls $unixSharePath/$shareName"
                fi
             fi
          fi
