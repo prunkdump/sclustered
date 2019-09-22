@@ -36,10 +36,11 @@ class debbug::client {
       require => File['/lib/systemd/system/sleep-winbind.service'],
    }
 
-   service { 'winbind_debbug':
-      name => 'winbind',
-      ensure => running,
-      require => Service['sleep-winbind']
+   exec { 'winbind_reload_systemd':
+      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      command => 'systemctl restart winbind',
+      refreshonly => true,
+      require => Service['sleep-winbind'],
       subscribe => File['/lib/systemd/system/sleep-winbind.service'],
    }
 
