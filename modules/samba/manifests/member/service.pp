@@ -10,8 +10,15 @@ class samba::member::service {
       enable => false,
    }
 
-   # start standard samba services #
-   service { ['nmbd','smbd']:
+   # does not use netbios #
+   service { 'nmbd':
+      ensure => stopped,
+      enable => false,
+      require => Service[$adservice],
+   }
+
+   # start samba service #
+   service { 'smbd':
       ensure => running,
       enable => true,
       require => Service[$adservice],

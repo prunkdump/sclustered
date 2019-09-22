@@ -11,11 +11,13 @@
    security = ADS
    workgroup = <%= @samba_short_domain %>
    realm = <%= @samba_realm %>
+   disable netbios = yes
 
    # security #
    dedicated keytab file = /etc/krb5.keytab
    kerberos method = secrets and keytab
-   winbind refresh tickets = Yes
+   winbind refresh tickets = yes
+   allow trusted domains = no
 
    log file = /var/log/samba/%m.log
    log level = 1
