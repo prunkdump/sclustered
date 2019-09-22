@@ -1,0 +1,13 @@
+[Unit]
+Description=winbind sleep hook
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=-/usr/bin/systemctl stop winbind
+ExecStop=-/usr/bin/systemctl start winbind
+
+[Install]
+WantedBy=sleep.target

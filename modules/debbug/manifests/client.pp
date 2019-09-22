@@ -23,4 +23,24 @@ class debbug::client {
       subscribe => File_option['start_puppet_after_network'],
    }
 
+
+   # BUG winbind fail on suspend: dns lookup don't works on resume #
+   file { '/lib/systemd/system/sleep-winbind.service':
+      ensure => present,
+      source => 'puppet:///modules/debbug/sleep-winbind.service',
+      mode => '0644',
+   }
+
+   service { 'sleep-winbind':
+      enable => true,
+      require => File['/lib/systemd/system/sleep-winbind.service'],
+   }
+
+   service { 'winbind_debbug':
+      name => 'winbind',
+      ensure => running,
+      require => Service['sleep-winbind']
+      subscribe => File['/lib/systemd/system/sleep-winbind.service'],
+   }
+
 }
