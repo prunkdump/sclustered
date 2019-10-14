@@ -1,0 +1,16 @@
+[Unit]
+Description=Daily apt download activities
+
+[Timer]
+<% if @autoupdate_times.length >= 1 -%>
+OnCalendar=
+OnCalendar=<%= @autoupdate_times[0] %>
+RandomizedDelaySec=0
+<% else -%>
+OnCalendar=*-*-* 6,18:00
+RandomizedDelaySec=12h
+<% end -%>
+Persistent=true
+
+[Install]
+WantedBy=timers.target

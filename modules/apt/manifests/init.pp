@@ -13,7 +13,9 @@ class apt (
    $keys = $apt::params::keys,
    $keys_additional = $apt::params::keys_additional,
    $autoupdates = $apt::params::autoupdates,
-   $autoupdate_blacklist = $apt::params::autoupdate_blacklist
+   $autoupdate_blacklist = $apt::params::autoupdate_blacklist,
+   $autoupdate_times = $apt::params::autoupdate_times,
+   $autoupdate_reboot = $apt::params::autoupdate_reboot
 ) inherits apt::params {
 
 

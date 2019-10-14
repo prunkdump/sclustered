@@ -84,7 +84,11 @@ Unattended-Upgrade::Remove-Unused-Dependencies "true";
 
 // Automatically reboot *WITHOUT CONFIRMATION* if
 //  the file /var/run/reboot-required is found after the upgrade
-//Unattended-Upgrade::Automatic-Reboot "false";
+<% if @autoupdate_reboot == true && @autoupdate_times.length >= 3 -%>
+Unattended-Upgrade::Automatic-Reboot "true";
+<% else -%>
+Unattended-Upgrade::Automatic-Reboot "false";
+<% end -%>
 
 // Automatically reboot even if there are users currently logged in
 // when Unattended-Upgrade::Automatic-Reboot is set to true
@@ -93,7 +97,11 @@ Unattended-Upgrade::Remove-Unused-Dependencies "true";
 // If automatic reboot is enabled and needed, reboot at the specific
 // time instead of immediately
 //  Default: "now"
+<% if @autoupdate_reboot == true && @autoupdate_times.length >= 3 -%>
+Unattended-Upgrade::Automatic-Reboot-Time "<%= @autoupdate_times[2] %>";
+<% else -%>
 //Unattended-Upgrade::Automatic-Reboot-Time "02:00";
+<% end -%>
 
 // Use apt bandwidth limit feature, this example limits the download
 // speed to 70kb/sec

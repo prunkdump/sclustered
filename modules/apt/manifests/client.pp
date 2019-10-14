@@ -9,7 +9,9 @@ class apt::client (
    $rep_keys = $apt::keys,
    $rep_keys_additional = $apt::keys_additional,
    $autoupdates = $apt::autoupdates,
-   $autoupdate_blacklist = $apt::autoupdate_blacklist
+   $autoupdate_blacklist = $apt::autoupdate_blacklist,
+   $autoupdate_times = $apt::autoupdate_times,
+   $autoupdate_reboot = $apt::autoupdate_reboot
 ) inherits apt {
 
    ##############
@@ -24,6 +26,8 @@ class apt::client (
       class{ 'apt::autoupdate':
          autoupdates => $autoupdates,
          autoupdate_blacklist => $autoupdate_blacklist,
+         autoupdate_times => $autoupdate_times,
+         autoupdate_reboot => $autoupdate_reboot,
          require => Class['apt::client::update'],
          before => Anchor['apt::client::end'],
       }

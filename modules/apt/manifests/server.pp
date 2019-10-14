@@ -4,7 +4,9 @@ class apt::server (
    $remaps = $apt::remaps,
    $debian_reps = $apt::debian_reps,
    $autoupdates = $apt::autoupdates,
-   $autoupdate_blacklist = $apt::autoupdate_blacklist
+   $autoupdate_blacklist = $apt::autoupdate_blacklist,
+   $autoupdate_times = $apt::autoupdate_times,
+   $autoupdate_reboot = $apt::autoupdate_reboot
 ) inherits apt {
 
    # common vars  #
@@ -22,6 +24,8 @@ class apt::server (
       class{ 'apt::autoupdate':
          autoupdates => $autoupdates,
          autoupdate_blacklist => $autoupdate_blacklist,
+         autoupdate_times => $autoupdate_times,
+         autoupdate_reboot => $autoupdate_reboot,
          require => Class['apt::server::service'],
          before => Anchor['apt::server::end'],
       }

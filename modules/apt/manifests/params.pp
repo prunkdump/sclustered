@@ -18,7 +18,8 @@ class apt::params {
    $pinnings = {}
    $keys = []
    $keys_additional = []
-   $autoupdates = undef
+   $autoupdates = []
    $autoupdate_blacklist = []
-
+   $autoupdate_times = []
+   $autoupdate_reboot = false
 }
