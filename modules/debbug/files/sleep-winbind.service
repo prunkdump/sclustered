@@ -4,10 +4,11 @@ Before=sleep.target
 StopWhenUnneeded=yes
 
 [Service]
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=-/usr/bin/systemctl stop winbind
-ExecStop=-/usr/bin/systemctl start winbind
+ExecStart=-systemctl stop winbind
+ExecStop=-systemctl start winbind
 
 [Install]
 WantedBy=sleep.target
