@@ -22,4 +22,10 @@ class wifi::config {
      require => File['/etc/network/interfaces.d'],
    }
 
+   # some old configuration files may conflict with /etc/network/interfaces #
+   $disabled_interfaces_files = $disabled_interfaces.map |$dis_interface| { "/etc/network/interfaces.d/${dis_interface}" }
+   file { $disabled_interfaces_files:
+      ensure => absent,
+   }
+
 }
