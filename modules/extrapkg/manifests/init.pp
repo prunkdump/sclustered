@@ -9,7 +9,7 @@ class extrapkg (
    #
    #   file { '/opt/mydebapp.deb':
    #      ensure => present,
-   #      source => 'puppet:///modules/extrapkg/mydebapp.deb',
+   #      source => 'puppet:///modules/extrapkg/pkg/mydebapp.deb',
    #      mode => '0644',
    #   }
    #
@@ -39,7 +39,7 @@ class extrapkg (
    #
    #   file { '/opt/mytarapp.tar.xz':
    #      ensure => present,
-   #      source => 'puppet:///modules/extrapkg/mytarapp.tar.xz',
+   #      source => 'puppet:///modules/extrapkg/pkg/mytarapp.tar.xz',
    #      mode => '0644',
    #   }
    #
@@ -52,7 +52,7 @@ class extrapkg (
    #
    #   file { '/usr/share/applications/mytarapp.desktop':
    #      ensure => present,
-   #      source => 'puppet:///modules/extrapkg/mytarapp.desktop',
+   #      source => 'puppet:///modules/extrapkg/pkg/mytarapp.desktop',
    #      mode => '0755',
    #   }
    #}
