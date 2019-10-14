@@ -44,4 +44,11 @@ class debbug::client {
       subscribe => File['/lib/systemd/system/sleep-winbind.service'],
    }
 
+   # nullmailer can fill disk with certain cron scripts #
+   service { 'nullmailer':
+      ensure => stopped,
+      enable => false,
+   }
+
+
 }
