@@ -3,6 +3,8 @@ class dhcp (
    $network = $dhcp::params::network,
    $netmask = $dhcp::params::netmask,
    $routers = $dhcp::params::routers,
+   $default_lease_time = $dhcp::params::default_lease_time,
+   $max_lease_time = $dhcp::params::max_lease_time,
    $domain_name = $dhcp::params::domain_name,
    $domain_name_servers = $dhcp::params::domain_name_servers,
    $pxe_server = $dhcp::params::pxe_server,

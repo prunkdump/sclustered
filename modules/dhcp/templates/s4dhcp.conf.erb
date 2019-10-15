@@ -10,6 +10,8 @@ include "/etc/dhcp/conf/02s4_class.conf";
 shared-network s4lan{
 
    use-host-decl-names on;
+   default-lease-time <%= @default_lease_time %>;
+   max-lease-time <%= @max_lease_time %>;
 
    # !! disabled !!
    #on commit {

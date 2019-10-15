@@ -22,6 +22,10 @@ class dhcp::params {
          $routers = ["${::network::effective_gateway}"]
       }
    }
+
+   $default_lease_time = 30240
+   $max_lease_time = 60480
+
    $domain_name = $::samba::domain
    $domain_name_servers = ["${::hostname}"]
 
