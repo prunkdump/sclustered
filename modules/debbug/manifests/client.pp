@@ -58,9 +58,9 @@ class debbug::client {
 
    service { 'suspend-bugs':
       enable => true,
-      require => [File['/lib/systemd/system/sleep-winbind.service','/sbin/dhclient-exit'],
+      require => [File['/lib/systemd/system/suspend-bugs.service','/sbin/dhclient-exit'],
                   File_option['add_networking_reload'],
-                  Exec['networking-service-daemon-reload'],
+                  Exec['networking-service-daemon-reload']],
    }
 
    exec { 'winbind_suspend_bug_restart':
