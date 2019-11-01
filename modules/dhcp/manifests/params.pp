@@ -23,8 +23,8 @@ class dhcp::params {
       }
    }
 
-   $default_lease_time = 30240
-   $max_lease_time = 60480
+   $default_lease_time = 1814400
+   $max_lease_time = 3628800
 
    $domain_name = $::samba::domain
    $domain_name_servers = ["${::hostname}"]
