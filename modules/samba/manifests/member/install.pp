@@ -5,7 +5,7 @@ class samba::member::install {
    #################
 
    # acl packages #
-   package { ['samba','acl','ntp']:
+   package { ['samba','acl']:
       ensure => installed,
    }
 

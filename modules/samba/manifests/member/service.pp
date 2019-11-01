@@ -25,10 +25,11 @@ class samba::member::service {
    }
 
    # ntp #
-   service { 'ntp':
-      ensure => running,
-      enable => true,
-   }
+   # switched to systemd-timesyncd
+   #service { 'ntp':
+   #   ensure => running,
+   #   enable => true,
+   #}
 
    # BUGGY
    # start winbind if needed #

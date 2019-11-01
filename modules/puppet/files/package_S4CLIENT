@@ -3,7 +3,6 @@ samba
 samba-dsdb-modules
 samba-vfs-modules
 puppet
-ntp
 krb5-user
 dnsutils
 #winbind

@@ -20,8 +20,9 @@ fcopy -Bv /etc/dhcp/dhclient-enter-hooks.d/nsupdate
 fcopy -Bv /etc/dhcp/dhclient-exit-hooks.d/nsupdate
 
 # change the ntp source #
+# switched to timesyncd
 # sed -i '/^\s*server /d' $target/etc/ntp.conf
-sed -i 's/^#\s*server .*/server <%= @hostname %> iburst prefer/' $target/etc/ntp.conf
+#sed -i 's/^#\s*server .*/server <%= @hostname %> iburst prefer/' $target/etc/ntp.conf
 
 # copy the root key #
 # and use it during the install #
