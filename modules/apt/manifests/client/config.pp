@@ -1,4 +1,4 @@
-define apt::client::pinning( $package = $title, $pin, $priority, $ensure = present) {
+define apt::client::config::pinning( $package = $title, $pin, $priority, $ensure = present) {
 
    file { "/etc/apt/preferences.d/${package}.pref":
       ensure => $ensure,
@@ -7,9 +7,9 @@ define apt::client::pinning( $package = $title, $pin, $priority, $ensure = prese
    }
 }
 
-define apt::client::pinning_p( $pinname = $title, $params ) {
+define apt::client::config::pinning_p( $pinname = $title, $params ) {
 
-   apt::client::pinning { "$pinname" :
+   apt::client::config::pinning { "$pinname" :
       pin => $params[$pinname][0],
       priority => $params[$pinname][1],
       ensure => present,
@@ -17,7 +17,7 @@ define apt::client::pinning_p( $pinname = $title, $params ) {
 }
 
 
-define apt::client::source( $sourcename = $title, $type = 'deb', $uri, $distribution = $apt::client::distribution, $components, $ensure = present) {
+define apt::client::config::source( $sourcename = $title, $type = 'deb', $uri, $distribution = $apt::client::distribution, $components, $ensure = present) {
 
    file { "/etc/apt/sources.list.d/$sourcename":
       ensure => $ensure,
@@ -55,7 +55,7 @@ class apt::client::config {
    # apt pinnings #
    ################
    $pinnings_keys = keys($pinnings)
-   apt::client::pinning_p { $pinnings_keys:
+   apt::client::config::pinning_p { $pinnings_keys:
       params => $pinnings,
    }   
 
