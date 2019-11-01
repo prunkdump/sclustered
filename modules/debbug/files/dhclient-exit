@@ -1,0 +1,4 @@
+#!/bin/bash
+for pidFile in /run/dhclient*; do
+   dhclient -x -pf $pidFile
+done
