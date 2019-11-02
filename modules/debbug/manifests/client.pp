@@ -65,7 +65,7 @@ class debbug::client {
 
    exec { 'winbind_suspend_bug_restart':
       path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-      command => 'systemctl restart winbind',
+      command => 'systemctl daemon-reload && systemctl restart winbind',
       refreshonly => true,
       require => Service['suspend-bugs'],
       subscribe => File['/lib/systemd/system/suspend-bugs.service'],

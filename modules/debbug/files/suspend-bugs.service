@@ -7,10 +7,10 @@ StopWhenUnneeded=yes
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=-/sbin/dhclient-exit
 ExecStart=-systemctl stop winbind
-ExecStop=-systemctl start winbind
+ExecStart=-/sbin/dhclient-exit
 ExecStop=-systemctl reload networking
+ExecStop=-systemctl start winbind
 
 [Install]
 WantedBy=sleep.target
