@@ -53,7 +53,7 @@ class debbug::client {
       path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
       command => 'systemctl daemon-reload',
       refreshonly => true,
-      subscribe => File_option['add_networking_reload'],
+      subscribe => [File['/lib/systemd/system/suspend-bugs.service'],File_option['add_networking_reload']],
    }
 
    service { 'suspend-bugs':
