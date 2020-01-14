@@ -3,77 +3,204 @@ use strict;
 use warnings;
 use experimental 'smartmatch';
 
-my $printerListFile = "/etc/cups/printers_list.conf";
+my $printerListFilePath = "/etc/cups/printers_list.conf";
 
 #######################################
 # get the list of printers to install #
 #######################################
-my %targetPrinters;
-open(PTL, "< $printerListFile");
-while( defined( my $line = <PTL> ) ) {
-   chomp($line);
-   my @params = split(' ', $line);
-   if( @params >= 3 ) {
-      my $printerName = shift(@params);
-      $targetPrinters{$printerName} = \@params;
+my @targetPrinters;
+
+open(my $printerListFile, "< $printerListFilePath") or die "Printer list file not found !";
+while( my $printerLine = <$printerListFile> ) {
+   chomp($printerLine);
+
+   # check for comments  #
+   if( ! ($printerLine =~ m/^\s*#/) ) {
+
+      # parse params #
+      my @printerParams = split(' ', $printerLine);
+
+      # <name> <serveur> <[@]target> [default] #
+      if( @printerParams >= 3 ) {
+
+         my %targetPrinter;
+
+         # get params #
+         $targetPrinter{name} = $printerParams[0];
+         $targetPrinter{server} = $printerParams[1];
+         if( $printerParams[2] =~ m/^@(\S+)$/ ) {
+            $targetPrinter{target} = $1;
+            $targetPrinter{remote} = "true";
+         } else {
+            $targetPrinter{target} = $printerParams[2];
+            $targetPrinter{remote} = "false";
+         }
+         if( @printerParams >= 4 && $printerParams[3] eq "default" ) {
+            $targetPrinter{default} = "true";
+         }
+
+         # push #
+         push @targetPrinters, \%targetPrinter; 
+      }
    }
 }
-close(PTL);
+close($printerListFile);
+
+
+#print("--------- target ----------------\n");
+#foreach my $targetPrinter (@targetPrinters) {
+#
+#   print("$targetPrinter->{name} $targetPrinter->{server} $targetPrinter->{target} remote: $targetPrinter->{remote}");
+#   if( $targetPrinter->{default} ) {
+#      print(" default");
+#   }
+#   print("\n");
+#}
+#print("---------------------------------\n");
+
 
 ##########################################
 # get the list of installed ipp printers #
 ##########################################
-my %installedPrinters;
+my @installedPrinters;
 my @implicitPrinters;
 
-open(LPS, "lpstat -v |");
-while( defined( my $line = <LPS> ) ){
-   if( $line =~ m/^device for (\S+): implicitclass:/ ) {
+open(my $lpstatList, "lpstat -v |") or die "Can't get printers info !";
+while( my $lpstatLine = <$lpstatList> ) {
+
+   # check for implicit printers #
+   if( $lpstatLine =~ m/ (\S+) : implicitclass:/ ) {
       push @implicitPrinters, $1;
    }
-   if( $line =~ m/^device for (\S+): ipps?:\/\/(\S+)\/printers\/(\S+)/ ){
-      $installedPrinters{$1} = [$2,$3];
+
+   # check for ipp printers #
+   if( $lpstatLine =~ m/ (\S+) : ipps?:\/\/(\S+)\/printers\/(\S+)/ ){
+
+      my %ippPrinter;
+      $ippPrinter{name} = $1;
+      $ippPrinter{server} = $2;
+      $ippPrinter{target} = $3;
+
+      # check if PPD present #
+      $ippPrinter{remote} = "true";
+
+      my $ippPrinterPPDPath = "/etc/cups/ppd/$ippPrinter{name}.ppd";
+      if( -e $ippPrinterPPDPath ) {
+         $ippPrinter{ppd} = "true";
+
+         # check if PPD is a everywhere one #
+         open(my $ippPrinterPPD, "< $ippPrinterPPDPath") or die "Can't open PPD file !";
+         while( my $ppdLine = <$ippPrinterPPD> ) {
+            if( $ppdLine =~ m/IPP Everywhere/ ) {
+               $ippPrinter{remote} = "false";
+               last;
+            }
+         }
+         close($ippPrinterPPD);
+      } else {
+         $ippPrinter{remote} = "false";
+      }
+      push @installedPrinters, \%ippPrinter;
    }
 }
-close(LPS);
+close($lpstatList);
+
+
+#print("--------- installed ----------------\n");
+#foreach my $installedPrinter (@installedPrinters) {
+#
+#   print("$installedPrinter->{name} $installedPrinter->{server} $installedPrinter->{target} remote: $installedPrinter->{remote}");
+#   if( $installedPrinter->{ppd} ) {
+#      print(" ppd");
+#   }
+#   print("\n");
+#}
+#print("---------------------------------\n");
+
+
 
 ################################
 # remove the implicit printers #
 ################################
 foreach my $pname (@implicitPrinters) {
+   #print("lpadmin -x $pname\n");
    system("lpadmin -x $pname");
 }
+
 
 ##################################
 # remove the installed printers  #
 # that are not in target         #
-# or if params change            #
+# or with bad params             #
+# or without PPD                 #
 ##################################
-my @targetPrintersNames = keys %targetPrinters;
-my @installedPrintersNames = keys %installedPrinters;
-foreach my $pname (@installedPrintersNames) {
-   if(  (! ( $pname ~~ @targetPrintersNames )) ||
-        ( $installedPrinters{$pname}[0] ne $targetPrinters{$pname}[0] ) ||
-        ( $installedPrinters{$pname}[1] ne $targetPrinters{$pname}[1] )
-     ) {
-      system("lpadmin -x $pname");
+foreach my $installedPrinter (@installedPrinters) {
+
+   my $printerFound = "false";
+   if( $installedPrinter->{ppd} ) {
+      foreach my $targetPrinter (@targetPrinters) {
+
+         if( $installedPrinter->{name} eq $targetPrinter->{name} &&
+             $installedPrinter->{server} eq $targetPrinter->{server} &&
+             $installedPrinter->{target} eq $targetPrinter->{target} &&
+             $installedPrinter->{remote} eq $targetPrinter->{remote} ) {
+            $printerFound = "true";
+            $targetPrinter->{set} = "true";
+            last;
+         }
+      }
+   }
+
+   # delete if needed #
+   if( $printerFound eq "false" ) {
+      #print("lpadmin -x $installedPrinter->{name}\n");
+      system("lpadmin -x $installedPrinter->{name}");
    }
 }
+
+
 
 ###########################
 # add the target printers #
+# and set the default     #
 ###########################
-foreach my $pname (@targetPrintersNames) {
-   # install if not exist #
-   if( ! ( $pname ~~ @installedPrintersNames ) ) {
-      system("lpadmin -p $pname -v ipp://$targetPrinters{$pname}[0]/printers/$targetPrinters{$pname}[1]");
-      system("cupsenable $pname");
-      system("cupsaccept $pname");
+foreach my $targetPrinter (@targetPrinters) {
+
+   # install or update remote printers #
+   if( $targetPrinter->{remote} eq "true" ) {
+
+      # download the ppd #
+      #print("wget --quiet --no-proxy -O /tmp/$targetPrinter->{target}.ppd http://$targetPrinter->{server}:631/printers/$targetPrinter->{target}.ppd\n");
+      system("wget --quiet --no-proxy -O /tmp/$targetPrinter->{target}.ppd http://$targetPrinter->{server}:631/printers/$targetPrinter->{target}.ppd");
+
+      #print('sed -i ' . "'" . 's/^\(\*cupsFilter: *\"\)\(.*\)\( .*\"\)/\1\2 -\"/' . "'" . " /tmp/$targetPrinter->{target}.ppd\n");
+      system('sed -i ' . "'" . 's/^\(\*cupsFilter: *\"\)\(.*\)\( .*\"\)/\1\2 -\"/' . "'" . " /tmp/$targetPrinter->{target}.ppd");
+
+      if( $targetPrinter->{set} ) {
+         # just replace the ppd #
+         #print("cp /tmp/$targetPrinter->{target}.ppd /etc/cups/ppd/$targetPrinter->{name}.ppd\n");
+         system("cp /tmp/$targetPrinter->{target}.ppd /etc/cups/ppd/$targetPrinter->{name}.ppd");
+      } else {
+         # install the printer #
+         #print("lpadmin -p $targetPrinter->{name} -E -v ipp://$targetPrinter->{server}/printers/$targetPrinter->{target} -P /tmp/$targetPrinter->{target}.ppd\n");
+         system("lpadmin -p $targetPrinter->{name} -E -v ipp://$targetPrinter->{server}/printers/$targetPrinter->{target} -P /tmp/$targetPrinter->{target}.ppd");
+      }
+   } 
+
+   # other printers #
+   else {
+
+      # install if not exist #
+      if( ! $targetPrinter->{set} ) {   
+         #print("lpadmin -p $targetPrinter->{name} -E -v ipp://$targetPrinter->{server}/printers/$targetPrinter->{target} -m everywhere\n");
+         system("lpadmin -p $targetPrinter->{name} -E -v ipp://$targetPrinter->{server}/printers/$targetPrinter->{target} -m everywhere");
+      }
    }
+
    # set as default if needed #
-   if( defined( $targetPrinters{$pname}[2] ) ){
-      system("lpadmin -d $pname");
+   if( $targetPrinter->{default} ) {
+      #print("lpadmin -d $targetPrinter->{name}\n");
+      system("lpadmin -d $targetPrinter->{name}");
    }
 }
-
 
