@@ -26,9 +26,14 @@ while( my $printerLine = <$printerListFile> ) {
          my %targetPrinter;
 
          # get params #
-         $targetPrinter{name} = $printerParams[0];
+         if( $printerParams[0] =~ m/^\s*_(\S+)$/ ) {
+            $targetPrinter{name} = $1;
+          } else {
+            $targetPrinter{name} = $printerParams[0];
+         }
+
          $targetPrinter{server} = $printerParams[1];
-         if( $printerParams[2] =~ m/^@(\S+)$/ ) {
+         if( $printerParams[2] =~ m/^_(\S+)$/ ) {
             $targetPrinter{target} = $1;
             $targetPrinter{remote} = "true";
          } else {
