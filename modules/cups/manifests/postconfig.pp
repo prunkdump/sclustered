@@ -9,6 +9,15 @@ class cups::postconfig {
       # network printers #
       ####################
 
+      # script to update printers #
+      file { 'lpupdate':
+         path => '/usr/bin/lpupdate',
+         ensure => file,
+         source => 'puppet:///modules/cups/lpupdate',
+         mode => '0744',
+      }
+
+      # file containing printers #
       file { 'printers_list.conf':
          path => '/etc/cups/printers_list.conf',
          ensure => file,
@@ -19,7 +28,7 @@ class cups::postconfig {
       exec { 'lpupdate':
          path => '/usr/bin:/usr/sbin:/bin',
          refreshonly => true,
-         subscribe => File['printers_list.conf'],
+         subscribe => File['lpupdate','printers_list.conf'],
       }
    }
 }
