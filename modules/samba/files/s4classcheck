@@ -1,0 +1,168 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    binName=$(basename $0)
+    echo "usage: $binName [class_name] [-g class_group] [-n class_show_name]"
+    exit 1
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hg:n:" opt; do
+	case $opt in
+	    g)
+		classGroup=$OPTARG
+		;;
+            n)
+                classShowName=$OPTARG
+                ;;
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 1
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# max one args #
+if [ $# -gt 1 ]; then
+    usage
+fi
+
+# get class name #
+if [ ! -z "$1" ]; then
+   className="$1"
+fi
+
+# check the class group #
+if [ ! -z "$classGroup" ]; then
+   classGroup=${classGroup,,}
+fi
+
+# if the class name is not set #
+# try to find it with the group #
+if [ -z "$className" ]; then
+
+   searchCond=''
+
+   if [ ! -z "$classGroup" ]; then
+      searchCond="${searchCond}(cn=$classGroup)"
+   fi
+
+   if [ ! -z "$classShowName" ]; then
+      searchCond="${searchCond}(displayName=$classShowName)"
+   fi
+
+   if [ -z "$searchCond" ]; then
+      usage
+   fi
+
+   searchCond="(&(objectClass=group)${searchCond})"
+
+   searchClass=''
+   searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN $searchCond dn | grep '^dn: ')
+   if [ -z "$searchClass" ]; then
+      echo "No class found !"
+      exit 1
+   else
+      resultCount=$(echo "$searchClass" | wc -l)
+      if [ "$resultCount" -ne "1" ]; then
+         echo "Multiple classes found !"
+         exit 1
+      fi
+
+      # read the class name  #
+      # the OU containing the group #
+      # (no need to remove the dn: part as we use -f2 ) #
+      className=$(echo "$searchClass" | cut -d, -f2)
+      className=${className#OU=}
+   fi
+fi
+
+
+# get the class group #
+if [ -z "$classGroup" ]; then
+   classGroup=${className,,}
+fi
+
+# search the class OU and the group #
+searchCond="(cn=$classGroup)"
+if [ ! -z "$classShowName" ]; then
+   searchCond="${searchCond}(displayName=$classShowName)"
+fi
+searchCond="(&(objectClass=group)${searchCond})"
+
+searchClass=''
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN $searchCond  dn | grep "^dn: CN=$classGroup,OU=$className")
+
+if [ -z "$searchClass" ]; then
+   echo "The class cannot be found !"
+   exit 1
+else
+
+   # check the corresponding share OU #
+   classDN=${searchClass#dn: CN=$classGroup,}
+   classDN=${classDN%,$baseDN}
+   classShareDN=${classDN%$baseUserDN}
+   classShareDN="${classShareDN}$baseShareDN"
+
+   OUName=$(echo "$classShareDN" | cut -d, -f1)
+   OUName=${OUName#OU=}
+
+   searchCond="(&(objectClass=organizationalUnit)(ou=$OUName))"
+   searchClass=''
+   searchClass=$(s4ldbsearch -H $samDatabase -b $classShareDN,$baseDN $searchCond  dn | grep "^dn: ")
+
+   if [ -z "$searchClass" ]; then
+      echo "Cannot found the share OU of the class $className !"
+      exit 1
+   fi
+
+fi
+
+echo "Class Name: $className"
+echo "Class group: $classGroup"
+echo "Class DN: $classDN"
+echo "Class share DN: $classShareDN"
+
+exit 0
+
+

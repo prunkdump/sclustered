@@ -8,8 +8,9 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <share_name> <mod,acls> [share_class] [-o owner] [-c show_classes] [-n show_name] [-s server]"
-    exit 0
+    binName=$(basename $0)
+    echo "usage: $binName <share_name> <[primary_access_class:]access_class1,access_class2, ...> [[mod,]acls] [-o owner] [-n show_name] [-s server]"
+    exit 1
 }
 
 
@@ -20,13 +21,10 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":ho:c:n:s:" opt; do
+    while getopts ":ho:n:s:" opt; do
 	case $opt in
 	    o)
 		shareOwner=$OPTARG
-		;;
-	    c)
-		shareShowClasses=$OPTARG
 		;;
             n)
                 shareShowName=$OPTARG
@@ -43,7 +41,7 @@ while [[ -n "$@" ]]; do
 		;;
 	    :)
 		echo "parameter of -$OPTARG not specified !"
-		exit 0
+		exit 1
 		;;
 	esac
     done
@@ -67,98 +65,161 @@ fi
 # analyse args
 #################
 
+#-------------------#
+# check args number #
+#-------------------#
+
 # max three args #
 if [ $# -gt 3 ] || [ $# -lt 2 ]; then
     usage
 fi
 
-#  check share's class #
-if [ -z "$3" ]; then
-   shareClassName=${baseUserDN#OU=}
-   shareClassGroup=${baseUserGroup}
-else
-   shareClassName=$3
-   shareClassGroup=${3,,}
+
+#-----------------------------#
+# check arg2 : access classes #
+#-----------------------------#
+
+# get share classes #
+shareShowClasses="$2"
+
+if echo "$shareShowClasses" | grep -q ':'; then
+   primaryShareShowClass=$(echo "$shareShowClasses" | cut -d: -f1)
 fi
 
-# parse share name  #
-shareName="${shareClassGroup}.${1,,}"
+if [ ! -z "$primaryShareShowClass" ]; then
+   shareShowClasses="${primaryShareShowClass},${shareShowClasses#${primaryShareShowClass}:}"
+fi
 
+
+# check all the classes      #
+# and compute the base class #
+IFS=','
+for shareShowClass in $shareShowClasses; do
+
+   if ! classInfo=$(s4classcheck $shareShowClass); then
+      echo "Class $shareShowClass cannot be found !"
+      exit 1
+   fi
+
+   classDN=$(echo "$classInfo" | grep 'Class DN: ')
+   classDN=${classDN#Class DN: }
+   classDN=$(echo "$classDN" | rev)
+   if [ -z "$commonDN" ]; then
+      commonDN="$classDN"
+      firstShareClassInfo="$classInfo"
+   else
+      fieldPos="2"
+      commonPart=$(echo "$commonDN" | cut -d, -f1) # the root is always common
+      nextField=$(echo "$commonDN" | cut -d, -f2)
+      while [ ! -z "$nextField" ] && echo "$classDN" | grep -q "^$commonPart,$nextField"; do
+         fieldPos=$((fieldPos+1))
+         commonPart="$commonPart,$nextField"
+         nextField=$(echo "$commonDN" | cut -d, -f${fieldPos})
+      done
+      commonDN="$commonPart"
+   fi
+done
+unset IFS
+commonDN=$(echo "$commonDN" | rev)
+
+# get base class, check and get info #
+shareBaseClass=$(echo "$commonDN" | cut -d, -f1)
+shareBaseClass=${shareBaseClass#OU=}
+if ! shareBaseClassInfo=$(s4classcheck $shareBaseClass); then
+   echo "Error : cannot found a correct common base class !"
+   exit 1
+fi
+
+# choose the primary class #
+if [ -z "$primaryShareShowClass" ]; then
+   # no primary class, use the common base class #
+   shareClassInfo="$shareBaseClassInfo"
+else
+   # use primary class, the first in the list #
+   shareClassInfo="$firstShareClassInfo"
+fi
+
+shareClass=$(echo "$shareClassInfo" | grep 'Class Name: ')
+shareClass=${shareClass#Class Name: }
+
+
+#--------------------------#
+# check arg1 : share name  #
+#--------------------------#
+
+# build the final share name : group.shareName #
+shareClassGroup=$(echo "$shareClassInfo" | grep 'Class group: ')
+shareClassGroup=${shareClassGroup#Class group: }
+shareName="${shareClassGroup}.${1,,}"
 
 # check if the share already exist #
 if wbinfo --user-info $shareName > /dev/null 2>&1; then
-   echo "The share already exist !"
-   exit 0
+   echo "The share $shareName already exist !"
+   exit 1
 fi
 
 
-# search the class #
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$shareClassGroup)" | grep "dn: CN=$shareClassGroup,OU=$shareClassName")
-if [ -z "$searchClass" ]; then
-   echo "The class $shareClassName cannot be found !"
-   exit 0
+#-----------------------------#
+# check arg3 : mod,acls       #
+#-----------------------------#
+sharePermissions=$3
+if [ -z "$sharePermissions" ]; then
+   sharePermissions="0550"
 else
-   shareClassDN=${searchClass#dn: CN=$shareClassGroup,}
-   shareClassDN=${shareClassDN%$baseUserDN,$baseDN}
+   # check mod #
+   sharePermissionsMod=$(echo "$sharePermissions" | cut -d, -f1)
+   if ! echo "$sharePermissionsMod" | grep -q -E '[0-2]?[0-7][0-7][0-7]'; then
+      sharePermissions="0555,$sharePermissions"
+   fi
 fi
 
 
-# save permissions #
-sharePermissions=$2
+#------------------#
+# check -o : owner #
+#------------------#
+shareBaseClassGroup=$(echo "$shareBaseClassInfo" | grep 'Class group: ')
+shareBaseClassGroup=${shareBaseClassGroup#Class group: }
 
-# check owner #
 if [ -z "$shareOwner" ]; then
-   shareOwner="root:${shareClassGroup}"
+   shareOwner="root:${shareBaseClassGroup}"
 fi
 
 shareOwnerUser=$(echo $shareOwner | cut -d: -f1)
 shareOwnerGroup=$(echo $shareOwner | cut -d: -f2)
 if [ -z "$shareOwnerUser" ] || [ -z "$shareOwnerGroup" ]; then
    echo "Cannot parse owner : $shareOwner"
-   exit 0
+   exit 1
 fi
 
-if [ "$shareOwnerUser" == "root" ]; then
-   shareOwnerUID="0"
-else
+# check owner user #
+if [ "$shareOwnerUser" != "root" ]; then
    struid=$(wbinfo --user-info="$shareOwnerUser")
    if [ $? -ne 0 ]; then
       echo "User $shareOwnerUser not found !"
-      exit 0
+      exit 1
    fi
-   shareOwnerUID=$(echo $struid | cut -d ":" -f 3)
 fi
 
-strgid=$(wbinfo --group-info="$shareOwnerGroup")
-if [ $? -ne 0 ]; then
-   echo "Group $shareOwnerGroup not found !"
-   exit 0
-fi
-shareOwnerGID=$(echo $struid | cut -d ":" -f 3)
-
-
-# check show classes #
-if [ -z "$shareShowClasses" ]; then
-   shareShowClasses="$shareClassName"
-fi
-
-IFS=','
-for shareShowClass in $shareShowClasses; do
-   wbinfo --group-info ${shareShowClass,,} > /dev/null 2>&1
+# check owner group #
+if [ "$shareOwnerGroup" != "root" ]; then
+   strgid=$(wbinfo --group-info="$shareOwnerGroup")
    if [ $? -ne 0 ]; then
-      echo "Class $shareShowClass cannot be found !"
-      exit 0
-   fi
-done
-unset IFS
-
-# check show name #
-if [ -z "$shareShowName" ]; then
-   shareShowName=${1,,}
+     echo "Group $shareOwnerGroup not found !"
+     exit 1
+  fi
 fi
 
 
-# check the server #
+#----------------------#
+# check -n : show name #
+#----------------------#
+if [ -z "$shareShowName" ]; then
+   shareShowName="$1"
+fi
+
+#-------------------#
+# check -s : server #
+#-------------------#
 if [ -z "$shareServer" ]; then
    shareServer=$(hostname)
 fi
@@ -177,7 +238,7 @@ else
 fi
 
 # get the gid #
-strgid=$(wbinfo --group-info="$baseShareGroup")
+strgid=$(wbinfo --group-info="$shareClassGroup")
 userGid=$(echo $strgid | cut -d ":" -f 3)
 
 
@@ -186,8 +247,11 @@ userGid=$(echo $strgid | cut -d ":" -f 3)
 #################
 echo "Creating s4 share $shareName"
 
+shareClassDN=$(echo "$shareClassInfo" | grep 'Class share DN: ')
+shareClassDN=${shareClassDN#Class share DN: }
+
 # create the share #
-samba-tool user create $shareName --userou=${shareClassDN}${baseShareDN} --random-password \
+samba-tool user create $shareName --userou=${shareClassDN} --random-password \
 --use-username-as-cn \
 --given-name="$shareShowName" \
 --description="${shareOwner},${sharePermissions}" \

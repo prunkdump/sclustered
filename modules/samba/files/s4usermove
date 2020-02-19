@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <user_name> <target_class>"
+    binName=$(basename $0)
+    echo "usage: $binName <user_name> <target_class>"
     exit 0
 }
 
@@ -69,22 +70,21 @@ fi
 
 # check the target class #
 userTargetClassName=$2
-userTargetClassGroup=${2,,}
-
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userTargetClassGroup)" | grep "dn: CN=$userTargetClassGroup,OU=$userTargetClassName")
-if [ -z "$searchClass" ]; then
+if ! userTargetClassInfo=$(s4classcheck $userTargetClassName); then
    echo "The class $userTargetClassName cannot be found !"
-   exit 0
+   exit 1
 else
-   userTargetClassDN=${searchClass#dn: CN=$userTargetClassGroup,}
-   userTargetClassDN=${userTargetClassDN%,$baseDN}
+   userTargetClassGroup=$(echo "$userTargetClassInfo" | grep 'Class group: ')
+   userTargetClassGroup=${userTargetClassGroup#Class group: }
+   userTargetClassDN=$(echo "$userTargetClassInfo" | grep 'Class DN: ')
+   userTargetClassDN=${userTargetClassDN#Class DN: }
 fi
 
 
-#################################
-# get the current student class #
-#################################
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" | grep "dn: CN=$userName")
+##############################
+# get the current user class #
+##############################
+searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" dn | grep "dn: CN=$userName")
 
 userCurrentClassDN=${searchClass#dn: CN=$userName,}
 userCurrentClassDN=${userCurrentClassDN%,$baseDN}
@@ -94,15 +94,16 @@ if [ "$userCurrentClassDN" == "$userTargetClassDN" ]; then
    exit 0
 fi
 
-###########################
-# get the new gid and sid #
-###########################
+###################
+# get the new gid #
+###################
 
 strgid=$(wbinfo --group-info="$userTargetClassGroup")
 userTargetGid=$(echo $strgid | cut -d ":" -f 3)
 
-strsid=$(wbinfo --gid-to-sid=$userTargetGid)
-userTargetPrimarySid=$(echo $strsid | cut -d "-" -f 8)
+# not needed anymore #
+#strsid=$(wbinfo --gid-to-sid=$userTargetGid)
+#userTargetPrimarySid=$(echo $strsid | cut -d "-" -f 8)
 
 
 ##########################################
@@ -120,19 +121,21 @@ deleteoldrdn: 1
 newsuperior: $userTargetClassDN,$baseDN" > /tmp/$userName
 
 ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
-#rm /tmp/$userName
+rm /tmp/$userName
 
 # change LDAP entry #
 echo "dn: CN=$userName,$userTargetClassDN,$baseDN
 changetype: modify
-replace: primarygroupid
-primarygroupid: $userTargetPrimarySid
--
 replace: gidnumber
 gidnumber: $userTargetGid" > /tmp/$userName
 
+# this not needed anymore #
+#replace: primarygroupid
+#primarygroupid: $userTargetPrimarySid
+#-
+
 ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
-#rm /tmp/$userName
+rm /tmp/$userName
 
 
 #####################################
@@ -183,6 +186,3 @@ for targetClassGroupOU in $userTargetClassDN; do
 done
 
 unset IFS
-
-
-

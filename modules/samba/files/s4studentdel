@@ -8,8 +8,9 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <student_name>"
-    exit 0
+   binName=$(basename $0)
+   echo "usage: $binName <student_name>"
+   exit 0
 }
 
 
@@ -55,7 +56,7 @@ fi
 # analyse args
 #################
 
-# just one arg #
+# just one arg, the student #
 if [ $# -ne 1 ]; then
     usage
 fi
@@ -67,7 +68,7 @@ studentName=$1
 # already done in s4userdel #
 
 # check if the account is a student #
-searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
+searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" dn | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
 if [ -z "$searchStudent" ]; then
    echo "The user $studentName is not a student !"
    exit 0

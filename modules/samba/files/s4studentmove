@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <student_name> <target_class>"
+    binName=$(basename $0)
+    echo "usage: $binName <student_name> <target_class>"
     exit 0
 }
 
@@ -62,24 +63,29 @@ fi
 
 # parse username #
 studentName=$1
+studentTargetClassName=$2
 
 # check if the student account exist #
 # already done in s4usermove #
 
 # check if the account is a student #
-searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
+searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" dn | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
 if [ -z "$searchStudent" ]; then
    echo "The user $studentName is not a student !"
    exit 0
 fi
 
-# check if the target class is a student's class #
-studentTargetClassName=$2
-studentTargetClassGroup=${2,,}
+# check if the class exist #
+if ! studentTargetClassInfo=$(s4classcheck $studentTargetClassName); then
+   echo "The student class $studentTargetClassName cannot be found !"
+   exit 0
+fi
 
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentTargetClassGroup)" | grep "dn: CN=$studentTargetClassGroup,OU=$studentTargetClassName,$baseStudentDN")
-if [ -z "$searchClass" ]; then
-   echo "The class $studentTargetClassName is not a student's class !"
+# check if the target class is a student's class #
+studentTargetClassDN=$(echo "$studentTargetClassInfo" | grep 'Class DN: ')
+studentTargetClassDN=${studentTargetClassDN#Class DN: }
+if ! echo "$studentTargetClassDN" | grep -q "$baseStudentDN\$"; then
+   echo "The student class $studentTargetClassName is not a student class !"
    exit 0
 fi
 

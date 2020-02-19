@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <student_name> <student_class> [-s server] [-p passwd]"
+    binName=$(basename $0)
+    echo "usage: $binName <student_name> <student_class> [-s server] [-p passwd]"
     exit 0
 }
 
@@ -70,9 +71,15 @@ newStudentClass=$2
 newStudentOptions=""
 
 # check if the class exist #
-newStudentClassGroup=${newStudentClass,,}
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$newStudentClassGroup)" | grep "dn: CN=$newStudentClassGroup,OU=$newStudentClass,$baseStudentDN")
-if [ -z "$searchClass" ]; then
+if ! newStudentClassInfo=$(s4classcheck $newStudentClass); then
+   echo "The student class $newStudentClass cannot be found !"
+   exit 0
+fi
+
+# check if the class is a student class #
+newStudentClassDN=$(echo "$newStudentClassInfo" | grep 'Class DN: ')
+newStudentClassDN=${newStudentClassDN#Class DN: }
+if ! echo "$newStudentClassDN" | grep -q "$baseStudentDN\$"; then
    echo "The student class $newStudentClass cannot be found !"
    exit 0
 fi
@@ -89,5 +96,4 @@ fi
 ######################
 # create the Student #
 ######################
-
 s4useradd $newStudentName $newStudentClass $newStudentOptions

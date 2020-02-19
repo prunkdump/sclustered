@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <class_name> [-b base_class] [-d display_name]"
+    binName=$(basename $0)
+    echo "usage: $binName <class_name> [-b base_class] [-d display_name]"
     exit 0
 }
 
@@ -69,11 +70,19 @@ classGroup=${1,,}
 
 # check the base class #
 if [ -z "$baseClass" ]; then
-   baseClassName=${baseUserDN#OU=}
    baseClassGroup=${baseUserGroup}
 else
    baseClassName=${baseClass}
-   baseClassGroup=${baseClass,,}
+   if ! baseClassInfo=$(s4classcheck $baseClassName); then
+      echo "The base class $baseClassName cannot be found !"
+      exit 1
+   else
+      baseClassGroup=$(echo "$baseClassInfo" | grep 'Class group: ')
+      baseClassGroup=${baseClassGroup#Class group: }
+      baseClassDN=$(echo "$baseClassInfo" | grep 'Class DN: ')
+      baseClassDN=${baseClassDN#Class DN: }
+      baseClassDN=${baseClassDN%${baseUserDN}}
+   fi
 fi
 
 # check display name #
@@ -87,36 +96,14 @@ fi
 
 # check if the class already exist #
 if wbinfo --group-info=$classGroup > /dev/null 2>&1; then
-   echo "The class $classGroupName already exist !"
+   echo "The class $className already exist !"
    exit 0
 fi
-
-# search for the base class #
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$baseClassGroup)" | grep "dn: CN=$baseClassGroup,OU=$baseClassName")
-if [ -z "$searchClass" ]; then
-   echo "The base class $baseClassName cannot be found !"
-   exit 0
-else
-   baseClassDN=${searchClass#dn: CN=$baseClassGroup,}
-   baseClassDN=${baseClassDN%$baseUserDN,$baseDN}
-fi
-
 
 # create the organizational unit #
 echo "create $className organizational units."
-echo "dn: OU=${className},${baseClassDN}${baseUserDN},${baseDN}
-changetype: add
-objectClass: top
-objectClass: organizationalunit
-
-dn: OU=${className},${baseClassDN}${baseShareDN},${baseDN}
-changetype: add
-objectClass: top
-objectClass: organizationalunit" > /tmp/$className
-
-ldbmodify --url=$samDatabase -b $baseDN /tmp/$className
-rm /tmp/$className
-
+samba-tool ou create "OU=${className},${baseClassDN}${baseUserDN},${baseDN}"
+samba-tool ou create "OU=${className},${baseClassDN}${baseShareDN},${baseDN}"
 
 # create the groups #
 s4groupadd $classGroup -d OU=${className},${baseClassDN}${baseUserDN}
@@ -128,4 +115,3 @@ displayName: $classDisplayName" > /tmp/$className
 
 ldbmodify --url=$samDatabase -b $baseDN /tmp/$className
 rm /tmp/$className
-

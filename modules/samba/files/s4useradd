@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <user_name> [user_class] [-s server] [-p passwd]"
+    binName=$(basename $0)
+    echo "usage: $binName <user_name> [user_class] [-s server] [-p passwd]"
     exit 0
 }
 
@@ -84,20 +85,18 @@ fi
 if [ -z "$2" ]; then
    userClassName=${baseUserDN#OU=}
    userClassGroup=${baseUserGroup}
+   userClassDN=${baseUserDN}
 else
    userClassName=$2
-   userClassGroup=${2,,}
-fi
-
-
-# search the class #
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userClassGroup)" | grep "dn: CN=$userClassGroup,OU=$userClassName")
-if [ -z "$searchClass" ]; then
-   echo "The class $userClassName cannot be found !"
-   exit 0
-else
-   userClassDN=${searchClass#dn: CN=$userClassGroup,}
-   userClassDN=${userClassDN%,$baseDN}
+   if ! userClassInfo=$(s4classcheck $userClassName); then
+      echo "The class $userClassName cannot be found !"
+      exit 1
+   else
+      userClassGroup=$(echo "$userClassInfo" | grep 'Class group: ')
+      userClassGroup=${userClassGroup#Class group: }
+      userClassDN=$(echo "$userClassInfo" | grep 'Class DN: ')
+      userClassDN=${userClassDN#Class DN: }
+   fi
 fi
 
 
@@ -111,7 +110,6 @@ fi
 if [ -z "$userPasswd" ]; then
    userPasswd=$userName
 fi
-
 
 
 ###############################

@@ -1,0 +1,228 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    binName=$(basename $0)
+    echo "usage: $binName <class_name> [-f]"
+    exit 0
+}
+
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":hf" opt; do
+	case $opt in
+	    h)
+		usage
+		;;
+            f)
+                forceDelete="true"
+                ;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# just one arg, the class #
+if [ $# -ne 1 ]; then
+    usage
+fi
+
+# parse class name #
+className=$1
+
+# check if the class exist #
+if ! classInfo=$(s4classcheck $className); then
+   echo "The class $className does not exist !"
+   exit 0
+fi
+
+
+####################
+# delete the class #
+####################
+
+# get DN #
+classDN=$(echo "$classInfo" | grep 'Class DN: ')
+classDN=${classDN#Class DN: }
+classShareDN=$(echo "$classInfo" | grep 'Class share DN: ')
+classShareDN=${classShareDN#Class share DN: }
+
+###############################
+# check if the class is empty #
+###############################
+echo "Computing what need to be deleted ..."
+
+
+# get the children OUs #
+childrenOUDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=organizationalUnit)' dn | grep '^dn: ' | sed "/^dn: $classDN/d" | sed 's/^dn: //')
+
+# check the OU that are classes #
+childrenClassDNs=''
+childrenOtherOUDNs=''
+
+if [ ! -z "$childrenOUDNs" ]; then
+   while IFS= read -r childrenOUDN; do
+      childrenOUName=$(echo "$childrenOUDN" | cut -d, -f1)
+      childrenOUName=${childrenOUName#OU=}
+      if s4classcheck $childrenOUName > /dev/null; then
+         # this is a class #
+         if [ -z "$childrenClassDNs" ]; then
+            childrenClassDNs="$childrenOUDN"
+         else
+            childrenClassDNs=$(echo -e "${childrenClassDNs}\n${childrenOUDN}")
+         fi
+      else
+         # this OU is not a class #
+         if [ -z "$childrenOtherOUDNs" ]; then
+            childrenOtherOUDNs="$childrenOUDN"
+         else
+            childrenOtherOUDNs=$(echo -e "${childrenOtherOUDNs}\n${childrenOUDN}")
+         fi
+      fi
+   done <<< "$childrenOUDNs"
+fi
+
+# get all the users in class #
+childrenUserDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=user)' dn | grep '^dn: ' | sed 's/^dn: //')
+
+# get all the groups in class that are not class groups #
+childrenGroupDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=group)' dn | grep '^dn: ' | sed 's/^dn: //')
+childrenOtherGroupDNs=''
+
+if [ ! -z "$childrenGroupDNs" ]; then
+   while IFS= read -r childrenGroupDN; do
+      childrenGroupName=$(echo "$childrenGroupDN" | cut -d, -f1)
+      childrenGroupName=${childrenGroupName#CN=}
+      if ! s4classcheck -g $childrenGroupName > /dev/null; then
+         if [ -z "$childrenOtherGroupDNs" ]; then
+            childrenOtherGroupDNs="$childrenGroupDN"
+         else
+            childrenOtherGroupDNs=$(echo -e "${childrenOtherGroupDNs}\n${childrenGroupDN}")
+         fi
+      fi
+   done <<< "$childrenGroupDNs"
+fi
+
+# get all the shares #
+childrenShareDNs=$(s4ldbsearch -H $samDatabase -b $classShareDN,$baseDN '(objectClass=user)' dn | grep '^dn: ' | sed 's/^dn: //')
+
+####################
+# print the result #
+####################
+noEmptyClass="false"
+
+# if force, no need to check if the class is empty #
+if [ -z "$forceDelete" ]; then
+   if [ ! -z "$childrenClassDNs" ]; then
+      echo "#-----------------------------------#"
+      echo "#            ! Warning !            #"
+      echo "# The following additionnal classes #"
+      echo "# will be deleted.                  #"
+      echo "#-----------------------------------#"
+      noEmptyClass="true"
+      echo "$childrenClassDNs"
+   fi
+
+   if [ ! -z "$childrenOtherOUDNs" ]; then
+      echo "#-----------------------------------#"
+      echo "#            ! Warning !            #"
+      echo "# The following additionnal OUs     #"
+      echo "# will be deleted.                  #"
+      echo "#-----------------------------------#"
+      noEmptyClass="true"
+      echo "$childrenOtherOUDNs"
+   fi
+
+   if [ ! -z "$childrenUserDNs" ]; then
+      echo "#-----------------------------------#"
+      echo "#            ! Warning !            #"
+      echo "# The following users will be       #"
+      echo "# deleted.                          #"
+      echo "#-----------------------------------#"
+      noEmptyClass="true"
+      echo "$childrenUserDNs"
+   fi
+
+   if [ ! -z "$childrenOtherGroupDNs" ]; then
+      echo "#-----------------------------------#"
+      echo "#            ! Warning !            #"
+      echo "# The following additionnal groups  #"
+      echo "# will be deleted.                  #"
+      echo "#-----------------------------------#"
+      noEmptyClass="true"
+      echo "$childrenOtherGroupDNs"
+   fi
+
+   if [ ! -z "$childrenShareDNs" ]; then
+      echo "#-----------------------------------#"
+      echo "#            ! Warning !            #"
+      echo "# The following shares will be      #"
+      echo "# deleted.                          #"
+      echo "#-----------------------------------#"
+      noEmptyClass="true"
+      echo "$childrenShareDNs"
+   fi
+fi
+
+
+############
+# delete ? #
+############
+if [ "$noEmptyClass" == "true" ]; then
+   if [ -z "$forceDelete" ]; then
+      if [ $(ask_yes_or_no "Are you sure you want to delete the class ?") == "no" ]; then
+         exit 0
+      fi
+   fi
+fi
+
+echo "Deleting the class !"
+samba-tool ou delete --force-subtree-delete $classDN
+samba-tool ou delete --force-subtree-delete $classShareDN
+echo "Class $className deleted !"

@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <teacher_name> [-s server] [-p passwd]"
+    binName=$(basename $0)
+    echo "usage: $binName <teacher_name> [-s server] [-p passwd]"
     exit 0
 }
 

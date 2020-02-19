@@ -8,7 +8,8 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0 <group_name> [-d group_DN]"
+    binName=$(basename $0)
+    echo "usage: $binName <group_name> [-d group_DN]"
     exit 0
 }
 
@@ -95,7 +96,6 @@ fi
 #################
 #create the group
 #################
-
 if [ -z "$groupDNSet" ]; then
    samba-tool group add $groupName --gid-number=$groupGid --nis-domain=${shortDomain,,}
 else

@@ -8,8 +8,17 @@ source /etc/samba/s4.conf
 # usage #
 function usage()
 {
-    echo "usage: $0"
+    binName=$(basename $0)
+    echo "usage: $binName"
     exit 0
+}
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
 }
 
 
@@ -27,6 +36,11 @@ fi
 # Create school structure #
 ###########################
 
+if [ $(ask_yes_or_no "Would you like to create a base school structure ?") == "no" ]; then
+   exit 0
+fi
+
+
 # get class names #
 usersClassName=${baseUserDN#OU=}
 teachersClassName=${baseTeacherDN#OU=}
@@ -41,4 +55,4 @@ s4classadd $teachersClassName -d $baseTeacherDir
 s4classadd $studentsClassName -d $baseStudentDir
 
 # create Teacher share #
-s4shareadd ${teachersDirName,,} 770 $teachersClassName -n $teachersDirName
+s4shareadd ${teachersDirName,,} $teachersClassName 770 -n $teachersDirName

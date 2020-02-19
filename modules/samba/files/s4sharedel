@@ -9,8 +9,8 @@ source /etc/samba/s4.conf
 function usage()
 {
     binName=$(basename $0)
-    echo "usage: $binName <teacher_name>"
-    exit 0
+    echo "usage: $binName <share_name>"
+    exit 1
 }
 
 
@@ -23,6 +23,15 @@ while [[ -n "$@" ]]; do
     OPTIND=1
     while getopts ":h" opt; do
 	case $opt in
+	    o)
+		shareOwner=$OPTARG
+		;;
+            n)
+                shareShowName=$OPTARG
+                ;;
+            s)
+                shareServer=$OPTARG
+                ;;
 	    h)
 		usage
 		;;
@@ -32,7 +41,7 @@ while [[ -n "$@" ]]; do
 		;;
 	    :)
 		echo "parameter of -$OPTARG not specified !"
-		exit 0
+		exit 1
 		;;
 	esac
     done
@@ -56,26 +65,26 @@ fi
 # analyse args
 #################
 
-# just one arg #
+#-------------------#
+# check args number #
+#-------------------#
+
+# one arg, the share #
 if [ $# -ne 1 ]; then
     usage
 fi
 
-# parse username #
-teacherName=$1
+shareName=$1
 
-# check if the teacher account exist #
-# already done in s4userdel #
-
-# check if the account is a teacher #
-searchTeacher=$(s4ldbsearch -H $samDatabase -b $baseTeacherDN,$baseDN "(cn=$teacherName)" dn | grep "dn: CN=$teacherName,$baseTeacherDN")
-if [ -z "$searchTeacher" ]; then
-   echo "The user $teacherName is not a teacher !"
+# check that the user is a share #
+searchShare=$(s4ldbsearch -H $samDatabase -b $baseShareDN,$baseDN "(cn=$shareName)" dn | grep "dn: CN=$shareName,.*$baseShareDN")
+if [ -z "$searchShare" ]; then
+   echo "Connot find the share $shareName !"
    exit 0
 fi
 
-###################
-# delete the user #
-###################
-
-s4userdel $teacherName
+####################
+# delete the share #
+####################
+samba-tool user delete $shareName
+echo "Share $shareName deleted !"

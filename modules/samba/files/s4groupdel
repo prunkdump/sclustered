@@ -9,7 +9,7 @@ source /etc/samba/s4.conf
 function usage()
 {
     binName=$(basename $0)
-    echo "usage: $binName <teacher_name>"
+    echo "usage: $binName <group_name>"
     exit 0
 }
 
@@ -49,33 +49,40 @@ done
 # reset args #
 if [ -n "$remArgs" ]; then
     set $remArgs
-fi
+fi;
 
 
 #################
 # analyse args
 #################
 
-# just one arg #
-if [ $# -ne 1 ]; then
+# one arg, the group #
+if [ $# != 1 ]; then
     usage
 fi
 
-# parse username #
-teacherName=$1
+groupName=$1
 
-# check if the teacher account exist #
-# already done in s4userdel #
+# check if the group already exit #
+if ! wbinfo --group-info $groupName > /dev/null 2>&1; then
+   echo "The group $groupName don't exist !"
+   exit 1
+fi
 
-# check if the account is a teacher #
-searchTeacher=$(s4ldbsearch -H $samDatabase -b $baseTeacherDN,$baseDN "(cn=$teacherName)" dn | grep "dn: CN=$teacherName,$baseTeacherDN")
-if [ -z "$searchTeacher" ]; then
-   echo "The user $teacherName is not a teacher !"
+# check if the group belong to a class #
+if classInfo=$(s4classcheck -g $groupName); then
+   className=$(echo "$classInfo" | grep 'Class Name: ')
+   className=${className#Class Name: }
+   echo "The group $groupName belong to the class $className !"
+   echo "To delete the group, you need to delete the class with :"
+   echo "s4classdel $className"
    exit 0
 fi
 
-###################
-# delete the user #
-###################
 
-s4userdel $teacherName
+####################
+# delete the group #
+####################
+samba-tool group delete $groupName
+
+echo "Group $groupName deleted !"
