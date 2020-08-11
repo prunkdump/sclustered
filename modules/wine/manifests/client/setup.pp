@@ -36,8 +36,9 @@ class wine::client::setup {
 
       pammount::mount { 'pam_mount_wine_unionfs':
          mountpoint => '/run/wine/%(USERUID)/prefixes',
-         #path => 'unionfs-fuse#~/.winediff=RW:/dnfs/wine=RO',
-         path => 'unionfs-fuse#~/.winediff=RW:/wine=RO',
+         #v1 : path => 'unionfs-fuse#~/.winediff=RW:/dnfs/wine=RO',
+         #v2 : switched to rsync path => 'unionfs-fuse#~/.winediff=RW:/wine=RO',
+         path => 'unionfs-fuse#/run/wine/%(USERUID)/diff=RW:/wine=RO',
          fstype => 'fuse',
          options => 'cow,uid=%(USERUID),gid=%(USERGID)',
          sgrp => "${samba_users_group}",

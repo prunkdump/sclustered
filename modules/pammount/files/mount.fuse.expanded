@@ -1,5 +1,6 @@
 #! /bin/bash
 newArgs=$(echo $@ | sed "s|~|${HOME}|g")
-userPath=$(echo $newArgs | sed "s|=\(.*\)\$|| " | sed "s|^\(.*\)${HOME}\(.*\)\$|${HOME}\2|")
+#userPath=$(echo $newArgs | sed "s|=\(.*\)\$|| " | sed "s|^\(.*\)${HOME}\(.*\)\$|${HOME}\2|")
+userPath=$(echo $newArgs | sed "s|^.*unionfs-fuse#\(.*\)=RW.*$|\1|")
 mkdir -p $userPath
 mount.fuse $newArgs
