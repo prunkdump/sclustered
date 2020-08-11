@@ -4,7 +4,7 @@ define apt::client::key( $key = $title ) {
       path => "/usr/share/keyrings/$key",
       ensure => file,
       mode => '0644',
-      source => "puppet:///modules/apt/$key",
+      source => "puppet:///modules/apt/keys/$key",
    }
 
    # apt-get update is done in the service class #
