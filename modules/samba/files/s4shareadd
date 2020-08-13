@@ -168,7 +168,7 @@ if [ -z "$sharePermissions" ]; then
 else
    # check mod #
    sharePermissionsMod=$(echo "$sharePermissions" | cut -d, -f1)
-   if ! echo "$sharePermissionsMod" | grep -q -E '[0-2]?[0-7][0-7][0-7]'; then
+   if ! echo "$sharePermissionsMod" | grep -q -E '^[0-2]?[0-7][0-7][0-7]$'; then
       sharePermissions="0555,$sharePermissions"
    fi
 fi
