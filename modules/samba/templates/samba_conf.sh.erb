@@ -1,5 +1,16 @@
 #! /bin/bash
 
+# by security don't apply on error #
+samSearch=$(s4ldbsearch -H <%= @private_path %>/sam.ldb '(ou=<%= @users_ou %>)')
+if [ "$?" -ne "0" ]; then
+   exit 0
+fi
+
+# check if samba AD already configured #
+if echo "$samSearch" | grep -q 'dn: OU=<%= @users_ou %>'; then
+   exit 0
+fi
+
 # parse args #
 if [ $# != 1 ]; then
    echo 'Admin pass not given !'
