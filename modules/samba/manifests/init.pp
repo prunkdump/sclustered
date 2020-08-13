@@ -5,6 +5,7 @@ class samba (
    $disable_groups = $samba::params::disable_groups,
    $default_groups = $samba::params::default_groups,
    $account_server = $samba::params::account_server,
+   $rsync_sysvol = $samba::params::rsync_sysvol,
    $accountsrv_dns = $samba::params::accountsrv_dns,
    $account_servers = $samba::params::account_servers,
    $print_server = $samba::params::print_server,

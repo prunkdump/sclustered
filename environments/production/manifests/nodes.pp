@@ -18,14 +18,21 @@ node 'example_pdc.samdom.com' {
 }
 
 node 'example_dc.samdom.com' {
-   #include stdlib
-   #class { 'network': }
-   #class { 'samba::dc':
-   #   disable_pam => true,
-   #}
-   #class { 'apt::server': }
+   include stdlib
+   class { 'network': }
+   class { 'samba::pdc':
+      rsync_sysvol => true,
+      disable_pam => true,
+      disable_groups => true,
+      account_server => true,
+      print_server => true,
+   }
+   class { 'apt::server': }
    #class { 'puppet::master': }
-   #class { 'debbug::sambaserver': }
+   class { 'cups':
+      disable_lpupdate => true,
+   }
+   class { 'debbug::sambaserver': }
 }
 
 

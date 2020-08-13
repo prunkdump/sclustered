@@ -5,6 +5,7 @@ class samba::pdc (
    $disable_groups = $samba::disable_groups,
    $default_groups = $samba::default_groups,
    $account_server = $samba::account_server,
+   $rsync_sysvol = $samba::rsync_sysvol,
    $print_server = $samba::print_server,
    $interfaces = $samba::interfaces,
    $default_admin_pass = $samba::default_admin_pass,
@@ -183,6 +184,7 @@ class samba::pdc (
    }->
    class { 'samba::pdc::postconfig': }->
    class { 'samba::pdc::sysvolrsync':
+      rsync_sysvol => $rsync_sysvol,
       before => Anchor['samba::pdc::end'],
    }
    if $print_server == true {

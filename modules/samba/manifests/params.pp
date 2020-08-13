@@ -9,6 +9,7 @@ class samba::params {
    $disable_groups = false
    $default_groups = []
    $account_server = false
+   $rsync_sysvol = false
    $accountsrv_dns = 'sambaaccount'
    $account_servers = []
    $print_server = false

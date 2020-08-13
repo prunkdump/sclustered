@@ -1,4 +1,6 @@
-class samba::pdc::sysvolrsync {
+class samba::pdc::sysvolrsync (
+   $rsync_sysvol = false
+) {
 
    $sysvolrsyncsrv_dns = $samba::pdc::sysvolrsyncsrv_dns
    $sysvolrsync_password = $samba::pdc::sysvolrsync_password
@@ -13,10 +15,26 @@ class samba::pdc::sysvolrsync {
       password => $sysvolrsync_password,
    }    
 
-   ############
-   # register #
-   ############
-   samba::srvregister { "$sysvolrsyncsrv_dns":
-      ensure => present,
+   # check if we need to rsync sysvol #
+   if $rsync_sysvol == true {
+
+      rsync::replicate { 'sysvol':
+         server => $sysvolrsyncsrv_dns,
+         password => $sysvolrsync_password,
+         src_files => ['/'],
+         dest_path => "${sysvol_path}",
+         minute => '*/15',
+      }
+   } 
+
+   # else register as sysvol reference #
+   else { 
+
+      ############
+      # register #
+      ############
+      samba::srvregister { "$sysvolrsyncsrv_dns":
+        ensure => present,
+      }
    }
 }
