@@ -3,6 +3,7 @@ class puppet::params {
    $casrv_dns = 'puppetca'
    $puppetcarsync_password = 'oi-wm)tr!yu' 
    $mastersrv_dns = 'puppet'
+   $compiler_only = false
    $enable_fai = true 
    $fai_pxe_finename = 'fai/pxelinux.0'
    $fai_loguser = 'fai'

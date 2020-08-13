@@ -1,4 +1,5 @@
 class puppet::camaster (
+   $compiler_only = $puppet::compiler_only,
    $enable_fai = $puppet::enable_fai,
    $fai_loguser = $puppet::fai_loguser,
    $fai_root_password = $puppet::fai_root_password,

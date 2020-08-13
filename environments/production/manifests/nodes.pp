@@ -28,7 +28,9 @@ node 'example_dc.samdom.com' {
       print_server => true,
    }
    class { 'apt::server': }
-   #class { 'puppet::master': }
+   class { 'puppet::camaster':
+      compiler_only => true,
+   }
    class { 'cups':
       disable_lpupdate => true,
    }
