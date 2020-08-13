@@ -74,26 +74,94 @@ ipc=$(echo $hostip | cut -d'.' -f3)
 ipd=$(echo $hostip | cut -d'.' -f4)
 reverseip="$ipd.$ipc.$ipb.$ipa.in-addr.arpa"
 
+#################################
+# get the interfaces from hiera #
+#################################
+
+# check the host file #
+if [ ! -e "/etc/puppet/hieradata/hostname/${hostname}.yaml" ]; then
+   echo "No host hiera configuration file !"
+   echo "Please create a file /etc/puppet/hieradata/hostname/$hostname.yaml"
+   echo "containing the interfaces that will be used."
+   echo " "
+   echo "Exemple :"
+   echo "---"
+   echo "samba::interfaces:"
+   echo "   - lo"
+   echo "   - enp1s0"
+   echo " "
+   exit 0
+fi
+
+# read the interfaces #
+interfacesDataStarted=''
+interfaces_flat=''
+
+while read -r fileLine; do
+
+  # check if we are reading interfaces #
+  if [ "$interfacesDataStarted" == "true" ]; then
+
+     # the line must start with - #
+     if echo "$fileLine" | grep -q '^[[:space:]]*-'; then
+
+        # add the interface #
+        newInterface=$(echo "$fileLine" | sed 's/^\s*-\s*\(\S*\).*$/\1/')
+        if [ ! -z "$newInterface" ]; then
+           interfaces_flat="$interfaces_flat $newInterface"
+        fi
+
+     # else if the line is not empty this may be some other data #
+     else
+        if ! echo "$fileLine" | grep -q '^[[:space:]]*$'; then
+           interfacesDataStarted=''
+        fi
+     fi
+  fi
+
+  # else search for the begin of intrefaces data #
+  else
+     if echo "$fileLine" | grep -q 'samba::interfaces:'; then
+        interfacesDataStarted='true'
+     fi
+  fi
+done < "/etc/puppet/hieradata/hostname/${hostname}.yaml"
+
+# trim and check #
+interfaces_flat=$(echo "$interfaces_flat" | xargs)
+if [ -z "$interfaces_flat" ] then
+   echo "No interfaces definition found in /etc/puppet/hieradata/hostname/${hostname}.yaml"
+   echo "Please add something like this :"
+   echo "---"
+   echo "samba::interfaces:"
+   echo "   - lo"
+   echo "   - enp1s0"
+   echo " "
+   exit 0
+fi
+
 # start to join the host #
 ssh $hostip "rm -f /etc/samba/smb.conf"
-ssh $hostip "samba-tool domain join $domain DC -Uadministrator --realm=$realm --dns=BIND9_DLZ --password=$SAMBAPASSWORD --option='idmap_ldb:use rfc2307 = yes'"
+ssh $hostip "samba-tool domain join $domain DC --option=\"interfaces=$interfaces_flat\" --option=\"bind interfaces only = yes\" --option=\"idmap_ldb:use rfc2307 = yes\" --dns-backend=BIND9_DLZ -Uadministrator --password=$SAMBAPASSWORD"
 
+# !! not needed anymore !! #
 # create A and PTR dsn entry #
-samba-tool dns add localhost $domain $hostname A $hostip -Uadministrator --password=$SAMBAPASSWORD
-samba-tool dns add localhost $reversezone $reverseip PTR $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
+#samba-tool dns add localhost $domain $hostname A $hostip -Uadministrator --password=$SAMBAPASSWORD
+#samba-tool dns add localhost $reversezone $reverseip PTR $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
 
+# !! not neede anymore !! #
 # get guid #
-while read -r line; do
-   if echo $line | grep $hostnameU; then
-      read -r line
-      objectguid=$(echo $line | cut -d' ' -f2)
-   fi
-done < <(ldbsearch -H /var/lib/samba/private/sam.ldb '(invocationId=*)' --cross-ncs objectguid)
+#while read -r line; do
+#   if echo $line | grep $hostnameU; then
+#      read -r line
+#      objectguid=$(echo $line | cut -d' ' -f2)
+#   fi
+#done < <(ldbsearch -H /var/lib/samba/private/sam.ldb '(invocationId=*)' --cross-ncs objectguid)
 
 # update guid dns #
-if [ -n "$objectguid" ]; then
-   samba-tool dns add localhost _msdcs.$domain $objectguid CNAME $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
-fi
+#if [ -n "$objectguid" ]; then
+#   samba-tool dns add localhost _msdcs.$domain $objectguid CNAME $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
+#fi
 
 # copy idmap #
 ssh $hostip "systemctl stop samba-ad-dc"
