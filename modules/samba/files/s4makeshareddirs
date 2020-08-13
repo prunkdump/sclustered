@@ -377,7 +377,6 @@ while read searchLine; do
                if [ ! -z "$shareAcls" ]; then
                   prefixedShareAcls=$(prefixAcls "$shareAcls")
                   setfacl -m $prefixedShareAcls $unixSharePath/$shareName
-                  echo "setfacl -m $prefixedShareAcls $unixSharePath/$shareName"
                fi
             fi
          fi
