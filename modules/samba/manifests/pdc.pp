@@ -181,10 +181,16 @@ class samba::pdc (
       adservice => $adservice,
       disable_nss => $disable_nss,
       disable_pam => $disable_pam,
-   }->
-   class { 'samba::pdc::postconfig': }->
+   }
+   if $rsync_sysvol != true {
+      class { 'samba::pdc::postconfig':
+         require => Class['samba::dcservice'],
+         before => Anchor['samba::pdc::end'],
+      }
+   }
    class { 'samba::pdc::sysvolrsync':
       rsync_sysvol => $rsync_sysvol,
+      require => Class['samba::dcservice'],
       before => Anchor['samba::pdc::end'],
    }
    if $print_server == true {
