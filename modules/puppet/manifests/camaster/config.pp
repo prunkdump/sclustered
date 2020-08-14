@@ -71,6 +71,7 @@ class puppet::camaster::config {
    }
 
    # change client server to localhost #
+   # OLD VERSION
    #file_option { 'camaster_server':
    #   path => '/etc/puppet/puppet.conf',
    #   option => 'server',
@@ -81,13 +82,14 @@ class puppet::camaster::config {
    #}
 
    # the agent need to use the localhost server #
-   file_line { 'add_puppet_host_entry':
-      path => '/etc/hosts',
-      line => "${::ipaddress}     puppet.${::domain}      puppet",
-      match => 'puppet',
-      ensure => present,
-      multiple => false,
-   }
+   # DISABLED, this change the server during catalog apply #
+   #file_line { 'add_puppet_host_entry':
+   #   path => '/etc/hosts',
+   #   line => "${::ipaddress}     puppet.${::domain}      puppet",
+   #   match => 'puppet',
+   #   ensure => present,
+   #   multiple => false,
+   #}
 
    ############################
    # rsync export the modules #
