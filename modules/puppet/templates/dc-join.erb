@@ -117,9 +117,8 @@ while read -r fileLine; do
            interfacesDataStarted=''
         fi
      fi
-  fi
 
-  # else search for the begin of intrefaces data #
+  # else search for the begin of interfaces data #
   else
      if echo "$fileLine" | grep -q 'samba::interfaces:'; then
         interfacesDataStarted='true'
@@ -129,7 +128,7 @@ done < "/etc/puppet/hieradata/hostname/${hostname}.yaml"
 
 # trim and check #
 interfaces_flat=$(echo "$interfaces_flat" | xargs)
-if [ -z "$interfaces_flat" ] then
+if [ -z "$interfaces_flat" ]; then
    echo "No interfaces definition found in /etc/puppet/hieradata/hostname/${hostname}.yaml"
    echo "Please add something like this :"
    echo "---"
