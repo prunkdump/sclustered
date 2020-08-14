@@ -27,7 +27,7 @@ class puppet::camaster::service {
    # else rsync puppet configuration #
    else {
 
-      rsync::replicate { 'puppet_master__conf':
+      rsync::replicate { 'puppetca':
          server => $casrv_dns,
          password => $puppetcarsync_password,
          src_files => ['/environments','/hieradata','/hiera.yaml','/modules'],
