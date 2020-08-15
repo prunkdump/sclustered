@@ -143,10 +143,15 @@ fi
 ssh $hostip "rm -f /etc/samba/smb.conf"
 ssh $hostip "samba-tool domain join $domain DC --option=\"interfaces=$interfaces_flat\" --option=\"bind interfaces only = yes\" --option=\"idmap_ldb:use rfc2307 = yes\" --dns-backend=BIND9_DLZ -Uadministrator --password=$SAMBAPASSWORD"
 
+# SAMBA BUG : bind-dns/dns.keytab is not created
+# needed to force
+ssh $hostip "samba_upgradedns --dns-backend=BIND9_DLZ"
+
 # !! not needed anymore !! #
-# create A and PTR dsn entry #
 #samba-tool dns add localhost $domain $hostname A $hostip -Uadministrator --password=$SAMBAPASSWORD
-#samba-tool dns add localhost $reversezone $reverseip PTR $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
+
+# create A and PTR dsn entry #
+samba-tool dns add localhost $reversezone $reverseip PTR $hostFqdn -Uadministrator --password=$SAMBAPASSWORD
 
 # !! not neede anymore !! #
 # get guid #
