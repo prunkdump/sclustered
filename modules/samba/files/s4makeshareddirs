@@ -192,6 +192,9 @@ function touchDir {
 # create user dirs #
 ####################
 
+# save remote server #
+remoteHomeServers=''
+
 # deleted later #
 oldHomeDirs=""
 
@@ -282,6 +285,14 @@ while read searchLine; do
                setfacl -b $unixHomePath/$userName
                setfacl -k $unixHomePath/$userName
             fi
+         else
+
+            # save the remote home server #
+            if [ -z "$remoteHomeServers" ]; then
+               remoteHomeServers="$userServer"
+            else
+               remoteHomeServers="$remoteHomeServers $userServer"
+            fi
          fi
       fi
       userRecordFound="no"
@@ -289,6 +300,43 @@ while read searchLine; do
 
 done < <(s4ldbsearch -H $samDatabase -b $baseClassUserDN '(objectClass=user)'  dn cn unixHomeDirectory)
 
+
+######################################
+# create nfs home server redirection #
+######################################
+for remoteHomeServer in $remoteHomeServers; do
+
+   serverHomeShareDir="/srv/nfs4/$homeShare/$remoteHomeServer"
+
+   # create directory #
+   touchDir "$serverHomeShareDir"
+
+   # create systemd unit #
+   systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount"
+   echo \
+"[Unit]
+
+[Mount]
+What=$serverHomeShareDir
+Where=$serverHomeShareDir
+Type=none
+Options=bind
+
+[Install]
+WantedBy=multi-user.target
+" > /lib/systemd/system/$systemdUnitName
+
+   systemctl enable $systemdUnitName
+   systemctl start $systemdUnitName
+
+   # create nfs4 redirection #
+   shareNfs=$(head /etc/exports.d/export.template)
+   shareNFSPath=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f1)
+   shareNFSParams=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f2)
+   shareNfs="$serverHomeShareDir  $shareNFSParams"
+   shareNfs=$(echo "$shareNfs" | sed s:\):,refer=/$homeShare/$remoteHomeServer@$remoteHomeServer\): )
+   echo "$shareNfs" > /etc/exports.d/home-redirection-$remoteHomeServer.exports
+done
 
 ######################
 # create shares dirs #
@@ -344,7 +392,7 @@ while read searchLine; do
       shareServer=${searchLine#unixHomeDirectory: }
    fi
 
-   # read show classes stored in memeberOf #
+   # read show classes stored in memberOf #
    if echo "$searchLine" | grep -q '^memberOf: '; then
       showClass=${searchLine#memberOf: CN=}
       showClass=$(echo "$showClass" | cut -d, -f1)
@@ -381,6 +429,7 @@ while read searchLine; do
             fi
          fi
 
+
          ########################
          # create nfs/dfs links #
          ########################
@@ -414,7 +463,7 @@ while read searchLine; do
 "[Unit]
 
 [Mount]
-What=$unixSharePath/$shareName
+What=$mountTarget
 Where=$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
 Type=none
 Options=bind
