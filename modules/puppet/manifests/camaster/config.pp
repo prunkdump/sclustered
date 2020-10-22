@@ -10,11 +10,7 @@ class puppet::camaster::config {
    ####################
 
    # dns_alt_names option #
-   if $compiler_only != true {
-      $dns_alt_names_value = "${casrv_dns},${mastersrv_dns},${casrv_dns}.${::domain},${mastersrv_dns}.${::domain}"
-   } else {
-      $dns_alt_names_value = "${mastersrv_dns},${mastersrv_dns}.${::domain}"
-   }
+   $dns_alt_names_value = "${casrv_dns},${mastersrv_dns},${casrv_dns}.${::domain},${mastersrv_dns}.${::domain}"
 
    file_option { 'camaster_dns_alt_names':
       path => '/etc/puppet/puppet.conf',

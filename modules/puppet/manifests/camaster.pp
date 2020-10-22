@@ -21,7 +21,7 @@ class puppet::camaster (
    class { 'puppet::camaster::config': }~>
    class { 'puppet::camaster::service': }
 
-   if $enable_fai == true {
+   if $compiler_only == false and $enable_fai == true {
       class { 'puppet::camaster::fai':
          require => Class['puppet::camaster::service'],
          before => Anchor['puppet::camaster::end'],
