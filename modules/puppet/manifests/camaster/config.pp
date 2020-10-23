@@ -24,6 +24,14 @@ class puppet::camaster::config {
    # ca option #
    if $compiler_only == true {
 
+      file_line { 'passenger_set_ca_certificate' :
+         path => '/etc/apache2/sites-available/puppet-master.conf',
+         line => '        SSLCARevocationFile     /var/lib/puppet/ssl/crl.pem',
+         match => 'SSLCARevocationFile',
+         ensure => present,
+         multiple => false,
+      }
+
       # disable ca #
       file_option { 'master_disable_ca':
          path => '/etc/puppet/puppet.conf',
@@ -45,6 +53,16 @@ class puppet::camaster::config {
       }
    }
 
+   else {
+
+      file_line { 'passenger_set_ca_certificate' :
+         path => '/etc/apache2/sites-available/puppet-master.conf',
+         line => '        SSLCARevocationFile     /var/lib/puppet/ssl/ca/ca_crl.pem',
+         match => 'SSLCARevocationFile',
+         ensure => present,
+         multiple => false,
+      }
+   }
 
    # base module path #
    file_option { 'camaster_basemodulepath':
@@ -64,6 +82,13 @@ class puppet::camaster::config {
       after => '\[main\]',
       multiple => false,
       ensure => present,
+   }
+
+   # ensure passenger enabled #
+   exec { 'enable_puppet_master_passenger':
+      command => 'a2ensite puppet-master',
+      path => '/usr/bin:/usr/sbin:/bin',
+      creates => '/etc/apache2/sites-enabled/puppet-master.conf',
    }
 
    # change client server to localhost #
