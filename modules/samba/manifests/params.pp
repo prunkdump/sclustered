@@ -9,9 +9,9 @@ class samba::params {
    $disable_groups = false
    $default_groups = []
    $account_server = false
+   $account_redirector = undef
    $rsync_sysvol = false
    $accountsrv_dns = 'sambaaccount'
-   $account_servers = []
    $print_server = false
    $sysvolrsyncsrv_dns = 'sysvolrsync' 
    $sysvolrsync_password = 'us@se!sd$ac'

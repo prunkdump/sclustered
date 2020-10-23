@@ -25,8 +25,8 @@ class samba::accountserver::config (
    $short_domain,
    $base_uid,
    $base_gid,
+   $account_redirector,
    $accountsrv_dns,
-   $account_servers,
    $etc_path,
    $private_path,
    $base_dn,
@@ -163,19 +163,26 @@ class samba::accountserver::config (
       share => "/$home_share/${::hostname}",
    }
   
-   # redirect remote homes #
-   #samba::accountserver::config::server_redirection { $account_servers:
-   #   base_share => "/$home_share",
-   #}
- 
    #######
    # dns #
    #######
+
    # !! useless to update !! #
    # samba will be restarted #
-   samba::srvregister { $accountsrv_dns:
-      ensure => present,
-      update => false,
+   if (! $account_redirector) or $hostname == $account_redirector {
+
+      samba::srvregister { $accountsrv_dns:
+         ensure => present,
+         update => false,
+      }
+   }
+
+   else {
+
+      samba::srvregister { $accountsrv_dns:
+         ensure => absent,
+         update => false,
+      }
    }
 }
 

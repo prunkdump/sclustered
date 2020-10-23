@@ -30,8 +30,8 @@ class samba::pdc (
 ) inherits samba {
 
    # get common vars #
+   $account_redirector = $samba::account_redirector
    $accountsrv_dns = $samba::accountsrv_dns
-   $account_servers = $samba::account_servers
    $sysvolrsyncsrv_dns = $samba::sysvolrsyncsrv_dns
    $sysvolrsync_password = $samba::sysvolrsync_password
    $realm = $samba::realm
@@ -120,8 +120,8 @@ class samba::pdc (
          short_domain => $short_domain,
          base_uid => $base_uid,
          base_gid => $base_gid,
+         account_redirector => $account_redirector,
          accountsrv_dns => $accountsrv_dns,
-         account_servers => $account_servers,
          etc_path => $etc_path,
          private_path => $private_path,
          base_dn => $base_dn,
