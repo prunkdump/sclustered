@@ -310,6 +310,8 @@ for remoteHomeServer in $remoteHomeServers; do
 
    # create directory #
    touchDir "$serverHomeShareDir"
+   chown root:$baseUserGroup "$serverHomeShareDir"
+   chmod 777 "$serverHomeShareDir"
 
    # create systemd unit #
    systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount"
@@ -403,6 +405,18 @@ while read searchLine; do
    if [ -z "$searchLine" ]; then
       if [ "$shareRecordFound" == "yes" ]; then
 
+         ##############
+         # get rights #
+         ##############
+         shareOwnerUser=$(echo "$shareOwner" | cut -d: -f1)
+         shareOwnerGroup=$(echo "$shareOwner" | cut -d: -f2)
+         if [ "$shareOwnerUser" != "root" ]; then
+            shareOwnerUser="$shortDomain\\$shareOwnerUser"
+         fi
+         if [ "$shareOwnerGroup" != "root" ]; then
+            shareOwnerGroup="$shortDomain\\$shareOwnerGroup"
+         fi
+
          ############################
          # create share directories #
          ############################
@@ -410,14 +424,6 @@ while read searchLine; do
 
             # share directory #
             if ! touchDir $unixSharePath/$shareName; then
-               shareOwnerUser=$(echo "$shareOwner" | cut -d: -f1)
-               shareOwnerGroup=$(echo "$shareOwner" | cut -d: -f2)
-               if [ "$shareOwnerUser" != "root" ]; then
-                  shareOwnerUser="$shortDomain\\$shareOwnerUser"
-               fi
-               if [ "$shareOwnerGroup" != "root" ]; then
-                  shareOwnerGroup="$shortDomain\\$shareOwnerGroup"
-               fi
                chown "$shareOwnerUser:$shareOwnerGroup" $unixSharePath/$shareName
                chmod $shareMod $unixSharePath/$shareName
                setfacl -b $unixSharePath/$shareName
@@ -441,6 +447,10 @@ while read searchLine; do
 
             # make dirs #
             touchDir $nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
+            if [ "$shareServer" != "$serverHostname" ]; then
+               chown "$shareOwnerUser:$shareOwnerGroup" "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
+               chmod 777 "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
+            fi
             touchDir $sambaDFSRoot/${showClass,,}/$shareClassDisplayName
 
             # nfs share #
