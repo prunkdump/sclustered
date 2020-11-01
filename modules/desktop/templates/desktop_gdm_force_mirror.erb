@@ -6,6 +6,16 @@ sleep 5
 # get gdm uid #
 gdmUid=$(id -u Debian-gdm)
 
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+
 get_serial_number () {
 
    #####################
@@ -125,6 +135,56 @@ go_out () {
 }
 
 
+add_screen_config () {
+
+   if [ -z "$2" ]; then
+      confLines=$(echo -e "$1")
+   else
+      confLines=$(echo -e "$1" | tac)
+   fi
+
+   # configuration header #
+echo '  <configuration>
+    <logicalmonitor>
+      <x>0</x>
+      <y>0</y>
+      <scale>1</scale>
+      <primary>yes</primary>' >> /var/lib/gdm3/.config/monitors.xml
+
+   # creates outputs #
+   IFS=''
+   while read line; do
+       outputName=$(echo "$line" | cut -d, -f1)
+       vendor=$(echo "$line" | cut -d, -f2)
+       product=$(echo "$line" | cut -d, -f3)
+       serialNumber=$(echo "$line" | cut -d, -f4)
+       rate=$(echo "$line" | cut -d, -f5)
+       if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ] && [ ! -z "$rate" ]; then
+          xrandrCommand="${xrandrCommand} --output ${outputName} --pos 0x0 --mode ${screenWidth}x${screenHeight} "
+          echo "      <monitor>
+        <monitorspec>
+          <connector>${outputName}</connector>
+          <vendor>${vendor}</vendor>
+          <product>${product}</product>
+          <serial>${serialNumber}</serial>
+        </monitorspec>
+        <mode>
+          <width>${screenWidth}</width>
+          <height>${screenHeight}</height>
+          <rate>${rate}</rate>
+        </mode>
+      </monitor>" >> /var/lib/gdm3/.config/monitors.xml
+      fi
+   done <<< "$confLines"
+   unset IFS
+
+   # configuration footer #
+   echo '    </logicalmonitor>
+  </configuration>' >> /var/lib/gdm3/.config/monitors.xml
+}
+
+
+
 ##########################################################
 
 #########
@@ -133,7 +193,7 @@ go_out () {
 rm -f /var/lib/gdm3/.config/monitors.xml
 rm -f /var/lib/gdm3/.config/monitors.xml.sh
 mkdir -p /var/lib/gdm3/.config
-
+mkdir -p /usr/lib/firmware/edid
 
 ###########
 # get def #
@@ -142,6 +202,16 @@ if [ ! -e /var/lib/gdm3/.config/monitors.xml.def ]; then
    go_out
 fi
 
+###############
+# check force #
+###############
+if [ "$1" == "-f" ]; then
+   forceEdid="true"
+fi
+
+###############
+# read config #
+###############
 defLine=$(head -n 1 /var/lib/gdm3/.config/monitors.xml.def)
 screenWidth=$(echo "$defLine" | cut '-dx' -f1)
 screenHeight=$(echo "$defLine" | cut '-dx' -f2)
@@ -154,6 +224,7 @@ fi
 # search for connected screens #
 ################################
 connectedScreens=''
+kernelEdidParams=''
 
 while read line; do
    stateFile="${line}/status"
@@ -170,8 +241,9 @@ while read line; do
 
       # compute output name #
       fullOutputName=$(basename ${line})
-      outputName=$(echo "$fullOutputName" | sed 's/^card.-//')
-      outputName=$(echo "$outputName" | sed 's/HDMI-.-\(.\)/HDMI-\1/')
+      kernelOutputName=$(echo "$fullOutputName" | sed 's/^card.-//')
+      outputName=$(echo "$kernelOutputName" | sed 's/HDMI-.-\(.\)/HDMI-\1/')
+      edidFirmwareFileName="${outputName,,}.bin"
 
       # check if we can get info from edid #
       if [ -e "$edidFile" ]; then
@@ -185,6 +257,12 @@ while read line; do
                product=$(get_binary_product $edidFile)
             fi
             serialNumber=$(get_serial_number $edidFile)
+
+            # if force Edid, copy firmware #
+            if [ ! -z "$forceEdid" ]; then
+               cp $edidFile /usr/lib/firmware/edid/$edidFirmwareFileName
+               kernelEdidParams="${kernelEdidParams}${outputName}=${kernelOutputName}:edid/${edidFirmwareFileName}\n"
+            fi
          fi
       fi
 
@@ -272,12 +350,14 @@ unset IFS
 
 
 # sort the list in same order than xrandr #
-
 sortedOutputList=''
+sortedKernelEdidParams=''
 IFS=''
 while read randrLine; do
    if echo $randrLine | grep -q "^.* connected "; then
       randrOutputName=$(echo $randrLine | cut -d' ' -f1)
+
+      # get output line #
       fullOutputLine=$(echo -e $connectedScreensWithRate | grep "^${randrOutputName},")
       if [ "$?" -eq "0" ]; then
          if [ -z "$sortedOutputList" ]; then
@@ -286,11 +366,74 @@ while read randrLine; do
             sortedOutputList="$sortedOutputList\n$fullOutputLine"
          fi
       fi
+
+      # get kernel param #
+      fullKernelEdidParams=$(echo -e $kernelEdidParams | grep "^${randrOutputName}=")
+      fullKernelEdidParams=${fullKernelEdidParams#"${randrOutputName}="}
+      if [ "$?" -eq "0" ]; then
+         if [ -z "$sortedKernelEdidParams" ]; then
+            sortedKernelEdidParams="drm.edid_firmware=${fullKernelEdidParams}"
+         else
+            sortedKernelEdidParams="${sortedKernelEdidParams},${fullKernelEdidParams}"
+         fi
+      fi
    fi
 done < <(echo -e $verboseRandr)
 unset IFS
 
 connectedScreensWithRate="$sortedOutputList"
+kernelEdidParams="$sortedKernelEdidParams"
+
+
+##################
+# display result #
+##################
+
+# print randr output with correct def in red #
+echo "----------------------------"
+echo "-   Randr current state    -"
+echo "----------------------------"
+randROutput=$(env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" xrandr 2>/dev/null)
+randROutput=$(echo "$randROutput" | sed "s/   ${screenWidth}x${screenHeight}\(.*\)$/\\\\033\[0;31m   ${screenWidth}x${screenHeight}\1\\\\033[0m/")
+echo -e "$randROutput"
+
+#####################
+# print the outputs #
+#####################
+echo "----------------------"
+echo "-   Outputs found    -"
+echo "----------------------"
+
+IFS=''
+while read line; do
+   outputName=$(echo "$line" | cut -d, -f1)
+   vendor=$(echo "$line" | cut -d, -f2)
+   product=$(echo "$line" | cut -d, -f3)
+   serialNumber=$(echo "$line" | cut -d, -f4)
+echo "For output $outputName"
+echo "   vendor: \"$vendor\""
+echo "   product: \"$product\""
+echo "   serial number: \"$serialNumber\""
+done < <(echo -e $connectedScreensWithRate)
+unset IFS
+
+
+############################
+# if force ask to continue #
+############################
+if [ ! -z "$forceEdid" ]; then
+   if [ $(ask_yes_or_no "Are you sure you want to store this configuration permanently ?") == "no" ]; then
+      exit 0
+   fi
+fi
+
+#########################
+# set kernel parameters #
+#########################
+if [ ! -z "$forceEdid" ]; then
+   sed -i "s|^.*GRUB_CMDLINE_LINUX_DEFAULT.*$|GRUB_CMDLINE_LINUX_DEFAULT=\"quiet ${kernelEdidParams}\"|" /etc/default/grub
+   update-grub
+fi
 
 #############################
 # build configuration files #
@@ -304,45 +447,26 @@ sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
    xrandrCommand="xrandr "
 
    # echo header #
-   echo '<monitors version="2">
-  <configuration>
-    <logicalmonitor>
-      <x>0</x>
-      <y>0</y>
-      <scale>1</scale>
-      <primary>yes</primary>' > /var/lib/gdm3/.config/monitors.xml
+   echo '<monitors version="2">' > /var/lib/gdm3/.config/monitors.xml
 
-   # creates outputs #
-   IFS=''
-   while read line; do
-       outputName=$(echo "$line" | cut -d, -f1)
-       vendor=$(echo "$line" | cut -d, -f2)
-       product=$(echo "$line" | cut -d, -f3)
-       serialNumber=$(echo "$line" | cut -d, -f4)
-       rate=$(echo "$line" | cut -d, -f5)
-       if [ ! -z "$outputName" ] && [ ! -z "$vendor" ] && [ ! -z "$product" ] && [ ! -z "$serialNumber" ] && [ ! -z "$rate" ]; then
-          xrandrCommand="${xrandrCommand} --output ${outputName} --pos 0x0 --mode ${screenWidth}x${screenHeight} "
-          echo "      <monitor>
-        <monitorspec>
-          <connector>${outputName}</connector>
-          <vendor>${vendor}</vendor>
-          <product>${product}</product>
-          <serial>${serialNumber}</serial>
-        </monitorspec>
-        <mode>
-          <width>${screenWidth}</width>
-          <height>${screenHeight}</height>
-          <rate>${rate}</rate>
-        </mode>
-      </monitor>" >> /var/lib/gdm3/.config/monitors.xml
-      fi
-   done < <(echo -e $connectedScreensWithRate)
-   unset IFS
+   #####################################
+   # create xrandr order configuration #
+   #####################################
+   #screensConf=$(echo -e $connectedScreensWithRate)
+   #add_screen_config "$screensConf"
+   add_screen_config "$connectedScreensWithRate"
 
-   # echo footer #
-   echo '    </logicalmonitor>
-  </configuration>
-</monitors>' >> /var/lib/gdm3/.config/monitors.xml
+   #############################################
+   # create xrandr REVERSE order configuration #
+   #############################################
+   #screensConf=$(echo -e $connectedScreensWithRate | tac)
+   #add_screen_config "$screensConf"
+   add_screen_config "$connectedScreensWithRate" -r
+
+   #######
+   # end #
+   #######
+   echo '</monitors>' >> /var/lib/gdm3/.config/monitors.xml
 
    # create script #
    echo "$xrandrCommand" >> /var/lib/gdm3/.config/monitors.xml.sh
