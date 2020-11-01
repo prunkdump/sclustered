@@ -34,11 +34,23 @@ class apt::autoupdate (
    ##########
    # timers #
    ##########
-   file { '/lib/systemd/system/apt-daily.timer':
-      ensure => file,
-      content => template('apt/apt-daily.timer.erb'),
+
+   # download time #
+   if length($autoupdate_times) >= 1 {
+      $apt_daily_override_status = file
+   } else {
+      $apt_daily_override_status = absent
+   }
+
+   file { '/etc/systemd/system/apt-daily.timer.d':
+      ensure => directory,
+   }
+
+   file { '/etc/systemd/system/apt-daily.timer.d/override.conf':
+      ensure => $apt_daily_override_status,
+      content => template('apt/apt-daily-timer-override.conf.erb'),
       mode => '0644',
-      require => Package['unattended-upgrades'],
+      require => [Package['unattended-upgrades'], File['/etc/systemd/system/apt-daily.timer.d']],
    }
 
    service { 'apt-daily.timer':
@@ -48,11 +60,23 @@ class apt::autoupdate (
       subscribe => File['/lib/systemd/system/apt-daily.timer'],
    }
 
-   file { '/lib/systemd/system/apt-daily-upgrade.timer':
-      ensure => file,
-      content => template('apt/apt-daily-upgrade.timer.erb'),
+
+   # upgrade time #
+   if length($autoupdate_times) >= 2 {
+      $apt_daily_upgrade_override_status = file
+   } else {
+      $apt_daily_upgrade_override_status = absent
+   }
+
+   file { '/etc/systemd/system/apt-daily-upgrade.timer.d':
+      ensure => directory,
+   }
+
+   file { '/etc/systemd/system/apt-daily-upgrade.timer.d/override.conf':
+      ensure => $apt_daily_upgrade_override_status,
+      content => template('apt/apt-daily-upgrade-timer-override.conf.erb'),
       mode => '0644',
-      require => Package['unattended-upgrades'],
+      require => [Package['unattended-upgrades'], File['/etc/systemd/system/apt-daily-upgrade.timer.d']],
    }
 
    service { 'apt-daily-upgrade.timer':
@@ -61,6 +85,4 @@ class apt::autoupdate (
       require => Package['unattended-upgrades'],
       subscribe => File['/lib/systemd/system/apt-daily-upgrade.timer'],
    }
-
 }
-   
