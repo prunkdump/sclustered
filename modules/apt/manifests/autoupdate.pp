@@ -57,7 +57,7 @@ class apt::autoupdate (
       ensure => running,
       enable => true,
       require => Package['unattended-upgrades'],
-      subscribe => File['/lib/systemd/system/apt-daily.timer'],
+      subscribe => File['/etc/systemd/system/apt-daily.timer.d/override.conf'],
    }
 
 
@@ -83,6 +83,6 @@ class apt::autoupdate (
       ensure => running,
       enable => true,
       require => Package['unattended-upgrades'],
-      subscribe => File['/lib/systemd/system/apt-daily-upgrade.timer'],
+      subscribe => File['/etc/systemd/system/apt-daily-upgrade.timer.d/override.conf'],
    }
 }
