@@ -40,11 +40,191 @@ function puppetizeHost() {
 
 # one arg, the host #
 if [ $# != 1 ]; then
-    echo "Give the host ip to join !"
+    echo "Give the host to join !"
     exit 0
 fi
-hostip="$1"
+target="$1"
 
+
+################
+# check target #
+################
+
+# check ssh connection #
+ssh $target -oBatchMode=yes 'echo hello'
+if [ "$?" -ne "0" ]; then
+   echo 'Cannot access to the target host !'
+   echo 'Please set a passwordless ssh connection with ssh-copy-id.'
+   exit 0
+fi
+
+
+# get the host params #
+hostname=$(ssh $target -oBatchMode=yes 'hostname')
+targetDomain=$(ssh $target -oBatchMode=yes 'hostname --domain')
+
+
+# check DNS #
+dnsSet='false'
+targetNameServer=$(ssh $target -oBatchMode=yes 'cat /etc/resolv.conf')
+hostname -I | while read -r interfaceIP; do
+   if echo "$targetNameServer" | grep -q "nameserver[[:space:]]*${interfaceIP}"; then
+      dnsSet='true'
+      break
+   fi
+done
+
+if [ "$dnsSet" != 'true' ]; then
+   echo "The target host DNS is not set to this DC !"
+   echo "Please check /etc/network/interfaces and /etc/resolv.conf"
+   echo "and ensure the DNS is set to to this DC's IP".
+   exit 0
+fi
+
+
+# check if the target is an IP otherwise resolve #
+if echo "$target" | grep -q '^[[digit]]?\.[[digit]]?\.[[digit]]?\.[[digit]]?$'; then
+   hostip="$target"
+else
+   hostip=$(host $target | rev | cut -d' ' -f 1 | rev)
+fi
+
+
+# check samba and puppet #
+if ! ssh $target -oBatchMode=yes 'dpkg -s samba >/dev/null 2>&1'; then
+   echo "Samba is not installed on the target host !"
+   echo "Please install the samba package"
+   exit 0
+fi
+
+if ! ssh $target -oBatchMode=yes 'dpkg -s puppet >/dev/null 2>&1'; then
+   echo "Puppet is not installed on the target host !"
+   echo "Please install the puppet package"
+   exit 0
+fi
+
+
+# check domain #
+domain='<%= @samba_domain %>'
+if [ "$targetDomain" != "$domain" ); then
+   echo "The target host does not have the correct domain :
+   echo "$domain"
+   echo 'Check /etc/network/interfaces, /etc/resolv.conf and /etc/hosts'
+   echo 'and correct all domain names'
+   exit 0
+fi
+hostFqdn="$hostname.$domain"
+
+
+# check puppet hiera interfaces #
+targetInterfaces=$(puppet lookup samba::interfaces --node $hostFqdn | sed '/^\s*-\s*lo\s*$/d' | grep '^[[:space:]]*-[[:space:]]')
+if [ "$?" -ne "0" ] || [ -z "$targetInterfaces" ]; then
+   echo "No hiera Samba interfaces configuration file for the target host !"
+   echo "Please create a file /etc/puppet/hieradata/hostname/$hostname.yaml"
+   echo "containing the interfaces that will be used."
+   echo " "
+   echo "Exemple :"
+   echo "---"
+   echo "samba::interfaces:"
+   echo "   - lo"
+   echo "   - enp1s0"
+   echo " "
+   exit 0
+fi
+
+
+# check node #
+currentNode=''
+targetIsDC='false'
+targetIsAccountServer='false'
+
+while read -r nodeLine; do
+
+   if echo "$nodeLine" | grep -q '^[[:space:]]*node[[:space:]]'; then
+      currentNode=$(echo "$nodeLine" | sed "s/^[[:space:]]*node[[:space:]]*'\(.*\)'.*$/\1/")
+   fi
+
+   if echo "$nodeLine" | grep -q 'samba::pdc'; then
+      if [ "$currentNode" == "$hostFqdn" ]; then
+         targetIsDC='true'
+      fi
+   fi
+
+   if echo "$nodeLine" | grep -q 'account_server[[:space:]]*=>[[:space:]]*true'; then
+      if [ "$currentNode" == "$hostFqdn" ]; then
+         targetIsAccountServer='true'
+      fi
+   fi
+done < /etc/puppet/environments/production/manifests/nodes.pp
+
+if [ "$targetIsDC" != 'true' ]; then
+   echo "The host $hostFqdn is not configured as DC in puppet."
+   echo "Check /etc/puppet/environments/production/manifests/nodes.pp"
+   echo "For a node definition with the samba::pdc class"
+   exit 0
+exit 0
+
+
+#####################################
+# check partition if account server #
+#####################################
+displayPartitionWarning='false'
+
+if [ "$targetIsAccountServer" == 'true' ]; then
+
+   # get locations #
+   targetHomeLocation=$(puppet lookup samba::home_path --node $hostFqdn | sed 's/^--- "\(.*\)".*$/\1/')
+   targetHomeLocationRoot=$(echo "$targetHomeLocation" | cut -d/ -f2)
+   targetShareLocation=$(puppet lookup samba::share_path --node $hostFqdn | sed 's/^--- "\(.*\)".*$/\1/')
+   targetShareLocationRoot=$(echo "$targetShareLocation" | cut -d/ -f2)
+   targetProfileLocation=$(puppet lookup samba::profile_path --node $hostFqdn | sed 's/^--- "\(.*\)".*$/\1/')
+   targetProfileLocationRoot=$(echo "$targetProfileLocation" | cut -d/ -f2)
+
+   # check is mounted #
+   if ! ssh $target -oBatchMode=yes 'mount' | grep -q "[[:space:]]/${targetHomeLocationRoot}"; then
+      displayPartitionWarning='true'
+   fi
+
+   if ! ssh $target -oBatchMode=yes 'mount' | grep -q "[[:space:]]/${targetShareLocationRoot}"; then
+      displayPartitionWarning='true'
+   fi
+
+   if ! ssh $target -oBatchMode=yes 'mount' | grep -q "[[:space:]]/${targetProfileLocationRoot}"; then
+      displayPartitionWarning='true'
+   fi
+fi
+
+
+##################
+# display result #
+##################
+
+echo "Please check carefully the parameters of the new DC :"
+echo "------------------------------"
+echo "hostname: $hostname"
+echo "domain: $targetDomain"
+echo "ip: $hostip"
+echo "interfaces:"
+echo "$targetInterfaces"
+if [ "$targetIsAccountServer" == "false" ]; then
+   echo "This DC is not an account server"
+else
+   echo "This DC is an account server"
+   echo "   Home path: $targetHomeLocation"
+   echo "   Share path: $targetShareLocation"
+   echo "   Profile path: $targetProfileLocation"
+fi
+echo "------------------------------"
+
+continueRep=$(ask_yes_or_no "Continue ?")
+if [ "$continueRep" == "no" ]; then
+   exit 0
+fi
+
+
+###############
+# join the DC #
+###############
 
 # get samba password #
 read -s -p "Give Samba4 password : " SAMBAPASSWORD
@@ -58,7 +238,6 @@ if (($? != 0)); then
 fi
 
 # get hostname #
-domain='<%= @samba_domain %>'
 realm='<%= @samba_realm %>'
 reversezone='<%= @reverse_zone %>'
 camasterdns='<%= @casrv_dns %>'
