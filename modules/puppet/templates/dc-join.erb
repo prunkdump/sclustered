@@ -423,3 +423,12 @@ scp /var/lib/samba/private/idmap.ldb.bak $hostip:/var/lib/samba/private/idmap.ld
 puppetizeHost
 ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = $camasterdns/' /etc/puppet/puppet.conf"
 ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nserver = $masterdns/' /etc/puppet/puppet.conf"
+
+
+# done #
+echo " "
+echo "OK !"
+echo "You can now run 'puppet agent -t' on the"
+echo "new DC ${hostname}."
+echo "Don't forget to run after 's4makeshareddirs' on"
+echo "all the account servers."
