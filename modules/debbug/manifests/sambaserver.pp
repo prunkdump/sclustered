@@ -19,4 +19,9 @@ class debbug::sambaserver {
       onlyif => 'grep -q "\$remote_fs" /etc/init.d/gssproxy',
    }
 
+   ########################################
+   # samba_dnsupdate depends on dnsutils  #
+   # witch is not automatically installed #
+   ########################################
+
 }
