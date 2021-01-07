@@ -1,0 +1,299 @@
+#!/bin/bash
+
+##############
+#base var
+##############
+source /etc/samba/s4.conf
+
+# usage #
+function usage()
+{
+    binName=$(basename $0)
+    echo "usage: $binName <user_name> <target_server>"
+    exit 0
+}
+
+
+###########
+#parse args
+###########
+while [[ -n "$@" ]]; do
+
+    # test option #
+    OPTIND=1
+    while getopts ":h" opt; do
+	case $opt in
+	    h)
+		usage
+		;;
+	    \?)
+		echo "option -$OPTARG not recognized !"
+		usage
+		;;
+	    :)
+		echo "parameter of -$OPTARG not specified !"
+		exit 0
+		;;
+	esac
+    done
+
+    # check classic args #
+    if [ $OPTIND != 1 ]; then
+       shift $((OPTIND-1))
+    else
+       remArgs="$remArgs $1"
+       shift 1
+    fi
+done
+
+# reset args #
+if [ -n "$remArgs" ]; then
+    set $remArgs
+fi
+
+
+#################
+# analyse args
+#################
+
+# need two args #
+if [ $# -ne 2 ]; then
+    usage
+fi
+
+# parse username #
+userName=$1
+targetServer=$2
+targetServer=$(echo "$targetServer" | cut -d. -f1)
+hostname=$(hostname)
+
+# check if the user exist #
+if ! wbinfo -i $userName > /dev/null 2>&1; then
+   echo "The user $userName does not exist !"
+   exit 0
+fi
+
+
+#####################
+# check user server #
+#####################
+userSearch=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" dn unixHomeDirectory)
+if [ "$?" != "0" ]; then
+   echo "Cannot find user current server !"
+   exit 0
+fi
+
+userDN=$(echo "$userSearch" | grep '^dn: ')
+
+sourceServer=$(echo "$userSearch" | grep 'unixHomeDirectory:')
+sourceServer=${sourceServer#unixHomeDirectory: /dnfs/$homeShare/}
+sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
+
+if [ -z "$userDN" ] || [ -z "$sourceServer" ]; then
+   echo "Cannot find user current server !"
+   exit 0
+fi
+
+
+#################
+# check servers #
+#################
+
+# check targetServer #
+if [ "$targetServer" == "$sourceServer" ]; then
+   echo "The user $userName is already stored on $sourceServer"
+   exit 0
+fi
+
+# check if source is local #
+if [ "$sourceServer" == "$hostname" ]; then
+   sourceServerIsLocal='true'
+   sourceServerHomePath="$unixHomePath"
+   sourceServerProfilePath="$unixProfilePath"
+else
+   # check access to the source server #
+   ssh $sourceServer -oBatchMode=yes 'echo hello' > /dev/null
+   if [ "$?" -ne "0" ]; then
+      echo "Cannot access to the source server $sourceServer !"
+      echo "Please set a passwordless ssh connection with ssh-copy-id."
+      exit 0
+   fi
+
+   # get directories #
+   sourceServerHomePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
+   if [ "$?" -ne "0" ] || [ -z "$sourceServerHomePath" ]; then
+      echo "Cannot find source server home path !"
+      exit 0
+   fi
+
+   sourceServerProfilePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
+   if [ "$?" -ne "0" ] || [ -z "$sourceServerProfilePath" ]; then
+      echo "Cannot find source server profile path !"
+      exit 0
+   fi
+fi
+
+# check if target is local #
+if [ "$targetServer" == "$hostname" ]; then
+   targetServerIsLocal='true'
+   targetServerHomePath="$unixHomePath"
+   targetServerProfilePath="$unixProfilePath"
+else
+   # check access to the target server #
+   ssh $targetServer -oBatchMode=yes 'echo hello' > /dev/null
+   if [ "$?" -ne "0" ]; then
+      echo "Cannot access to the target server $targetServer !"
+      echo "Please set a passwordless ssh connection with ssh-copy-id."
+      exit 0
+   fi
+
+   # get directories #
+   targetServerHomePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
+   if [ "$?" -ne "0" ] || [ -z "$targetServerHomePath" ]; then
+      echo "Cannot find target server home path !"
+      exit 0
+   fi
+
+   targetServerProfilePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
+   if [ "$?" -ne "0" ] || [ -z "$targetServerProfilePath" ]; then
+      echo "Cannot find target server profile path !"
+      exit 0
+   fi
+fi
+
+
+########################
+# rsync home to target #
+########################
+
+# check if home exits #
+if [ "$sourceServerIsLocal" == 'true' ]; then
+   test -e "$sourceServerHomePath/$userName"
+else
+   ssh $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
+fi
+
+# rsync home #
+if [ "$?" -eq "0" ]; then
+
+   # build source #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      rsyncSource="$sourceServerHomePath/$userName"
+   else
+      rsyncSource="$sourceServer:/$sourceServerHomePath/$userName"
+   fi
+
+   # build dest #
+   if [ "$targetServerIsLocal" == 'true' ]; then
+      rsyncDest="$targetServerHomePath/"
+   else
+      rsyncDest="$targetServer:/$targetServerHomePath/"
+   fi
+
+   # rsync #
+   echo "Migrating $userName home directory to $targetServer..."
+   rsync -XAaz --delete-after $rsyncSource $rsyncDest
+   if [ "$?" -eq '0' ]; then
+      echo "User $userName home directory migrated to $targetServer."
+      userHomeMigrated='true'
+   else
+      echo "Error while migrating $userName home directory to $targetServer !"
+      exit 0
+   fi
+else
+   echo "WARNING ! No home directory found while migrate $userName from $sourceServer"
+fi
+
+
+###########################
+# rsync profile to target #
+###########################
+
+# check if profile exits #
+if [ "$sourceServerIsLocal" == 'true' ]; then
+   test -e "$sourceServerProfilePath/$userName"
+else
+   ssh $sourceServer -oBatchMode=yes "test -e $sourceServerProfilePath/$userName"
+fi
+
+# rsync profile #
+if [ "$?" -eq "0" ]; then
+
+   # build source #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      rsyncSource="$sourceServerProfilePath/$userName"
+   else
+      rsyncSource="$sourceServer:/$sourceServerProfilePath/$userName"
+   fi
+
+   # build dest #
+   if [ "$targetServerIsLocal" == 'true' ]; then
+      rsyncDest="$targetServerProfilePath/"
+   else
+      rsyncDest="$targetServer:/$targetServerProfilePath/"
+   fi
+
+   # rsync #
+   echo "Migrating $userName profile directory to $targetServer..."
+   rsync -XAaz --delete-after $rsyncSource $rsyncDest
+   if [ "$?" -eq '0' ]; then
+      echo "User $userName profile directory migrated to $targetServer."
+      userProfileMigrated='true'
+   else
+      echo "Error while migrating $userName profile directory to $targetServer !"
+      exit 0
+   fi
+fi
+
+
+##################
+# update account #
+##################
+
+echo "$userDN
+changetype: modify
+replace: homeDirectory
+homeDirectory: \\\\${targetServer}\\${homeShare}\\${userName}
+replace: profilePath
+profilePath: \\\\${targetServer}\\${profileShare}\\${userName}
+replace: unixHomeDirectory
+unixHomeDirectory: /dnfs/${homeShare}/${targetServer}/$userName" > /tmp/$userName
+
+ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+rm /tmp/$userName
+
+if [ "$?" -eq '0' ]; then
+   echo "User $userName migrated to $targetServer !"
+else
+   echo "Error while updating user $userName account !"
+   exit 0
+fi
+
+
+################
+# clean source #
+################
+
+# clean home #
+if [ "$userHomeMigrated" == 'true' ]; then
+
+   # remove source #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      rm -rf "$sourceServerHomePath/$userName"
+   else
+      ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerHomePath/$userName"
+   fi
+fi
+
+# clean profile #
+if [ "$userProfileMigrated" == 'true' ]; then
+
+   # remove source #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      rm -rf "$sourceServerProfilePath/$userName"
+   else
+      ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerProfilePath/$userName"
+   fi
+fi
+
+# done ! #

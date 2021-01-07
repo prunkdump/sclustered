@@ -81,7 +81,7 @@ class samba::accountserver::config (
                             's4schoolsetup','s4sconetupdate','s4shareadd','s4studentadd',
                             's4studentclassadd','s4teacheradd','s4useradd','s4changepassword',
                             's4userdel','s4studentdel','s4teacherdel','s4usermove','s4studentmove',
-                            's4classcheck','s4classdel','s4groupdel','s4sharedel']: }
+                            's4classcheck','s4classdel','s4groupdel','s4sharedel','s4usermigrate']: }
 
    ####################
    # base directories #
