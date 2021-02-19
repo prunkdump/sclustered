@@ -77,9 +77,8 @@ fi
 shareName=$1
 
 # check that the user is a share #
-searchShare=$(s4ldbsearch -H $samDatabase -b $baseShareDN,$baseDN "(cn=$shareName)" dn | grep "dn: CN=$shareName,.*$baseShareDN")
-if [ -z "$searchShare" ]; then
-   echo "Connot find the share $shareName !"
+if ! s4ldbsearch $baseShareDN,$baseDN sub user "(cn=$shareName)" > /dev/null; then
+   echo "Cannot find the share $shareName !"
    exit 0
 fi
 

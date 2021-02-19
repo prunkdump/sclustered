@@ -1,191 +1,413 @@
-#!/bin/bash
+#! /usr/bin/perl -w
+use strict;
+use warnings;
+use utf8;
+use File::Basename;
+use File::Path;
+use File::Finder;
+use Getopt::Long;
+use Sys::Hostname;
+use Linux::ACL;
+use Data::Dumper;
 
-##############
-#base var
-##############
-source /etc/samba/s4.conf
+# output as utf8 #
+binmode(STDOUT,':encoding(UTF-8)');
 
+#########
 # usage #
-function usage()
-{
-    echo "usage: $0 [-b baseClass] [-f] [-d]"
-    echo "-b : update only dirs belonging to baseClass"
-    echo "-f : force updating share permissions"
-    echo "-d : delete unused dirs, asking for confirmation"
-    exit 0
+#########
+sub displayUsage {
+   my $callerProgram = basename($0);
+   print("usage: $0 [-b baseClass] [-f] [-d]");
+   print("   -b : update only dirs belonging to baseClass");
+   print("   -f : force updating share permissions");
+   print("   -d : delete unused dirs, asking for confirmation");
+   exit(0);
 }
 
-function ask_yes_or_no() {
-   read -p "$1 ([y]es or [N]o): "
-   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
-      y|yes) echo "yes" ;;
-      *)     echo "no" ;;
-   esac
-}
 
+######################
+# check samba config #
+######################
+my $s4ConfFile = "/etc/samba/s4.conf";
+
+# global vars #
+my $samDatabase;
+my $baseDN;
+my $baseUserDN;
+my $baseUserGroup;
+
+my $dfsPath;
+my $unixHomePath;
+my $homeShare;
+my $unixProfilePath;
+my $profileShare;
+my $unixSharePath;
+my $shareShare;
+
+my $baseShareDN;
+
+ 
+my $studentBaseDN;
+my $baseStudentDN;
+my $loginSurnameChar;
+my $loginGivennameChar;
+my $unixHomePath;
+my $baseStudentDir;
+my $teachersDirName;
+
+# open main configuration file #
+open(SCONF, "< $s4ConfFile") or die("Cannot read $s4ConfFile");
+while( defined( my $line = <SCONF> ) ) {
+   chomp $line;
+   
+   # remove comments #
+   if( $line =~ m/\#/ ) {
+      if( $line =~ /(.*?)\#/ ) {
+         $line = $1;
+      }
+   }
+
+   # sam database #
+   if ( $line =~ m/samDatabase *= *\"(.*?)\"/ ) {
+      $samDatabase = $1;
+   }
+
+   # student base dn #
+   elsif ( $line =~ m/baseDN *= *\"(.*?)\"/ ) {
+      $baseDN = $1;
+   }
+   elsif ( $line =~ m/baseUserDN *= *\"(.*?)\"/ ) {
+      $baseUserDN = $1;
+   }
+   elsif ( $line =~ m/baseStudentDN *= *\"(.*?)\"/ ) {
+      $baseStudentDN = $1;
+   }
+   elsif ( $line =~ m/baseShareDN *= *\"(.*?)\"/ ) {
+      $baseShareDN = $1;
+   }
+
+   # base user group #
+   elsif ( $line =~ m/baseUserGroup *= *\"(.*?)\"/ ) {
+      $baseUserGroup = $1;
+   }
+
+   # directory structure #
+   elsif ( $line =~ m/dfsPath *= *\"(.*?)\"/ ) {
+      $dfsPath = $1;
+   }
+   elsif( $line =~ m/unixHomePath *= *\"(.*?)\"/ ) {  
+      $unixHomePath = $1;
+   }
+   elsif( $line =~ m/homeShare *= *\"(.*?)\"/ ) {
+      $homeShare = $1;
+   }
+   elsif( $line =~ m/unixProfilePath *= *\"(.*?)\"/ ) {
+      $unixProfilePath = $1;
+   }
+   elsif( $line =~ m/profileShare *= *\"(.*?)\"/ ) {
+      $profileShare = $1;
+   }
+   elsif( $line =~ m/unixSharePath *= *\"(.*?)\"/ ) {
+      $unixSharePath = $1;
+   }
+   elsif( $line =~ m/shareShare *= *\"(.*?)\"/ ) {
+      $shareShare = $1;
+   }
+
+   # login surname part #
+   elsif ( $line =~ m/loginSurnameChar *= *\"(.*?)\"/ ) {
+      $loginSurnameChar = $1;
+   }
+
+   # login givenname part #
+   elsif ( $line =~ m/loginGivennameChar *= *\"(.*?)\"/ ) {
+      $loginGivennameChar = $1;
+   }
+
+   # unix home path #
+   elsif ( $line =~ m/unixHomePath *= *\"(.*?)\"/ ) {
+      $unixHomePath = $1;
+   }
+
+   # base students directory #
+   elsif ( $line =~ m/baseStudentDir *= *\"(.*?)\"/ ) {
+      $baseStudentDir = $1;
+   }
+
+   # teacher shared directory name  #
+   elsif ( $line =~ m/teachersDirName *= *\"(.*?)\"/ ) {
+      $teachersDirName = $1;
+   }
+
+}
+close(SCONF);
+
+# check global vars #
+if( ! (defined($samDatabase) &&
+       defined($baseDN) &&
+       defined($baseUserDN) &&
+       defined($baseStudentDN) &&
+       defined($loginSurnameChar) &&
+       defined($loginGivennameChar) ) ) {
+   print("Cannot read global variables on $s4ConfFile\n");
+   exit(0); 
+} else {
+   $studentBaseDN = "$baseStudentDN,$baseDN";
+}
 
 
 ###########################
-# function to prefix acls #
+# uid/gid mapping library #
 ###########################
-function prefixAcls {
 
-   # backup IFS #
-   IFS_BACK="$IFS"
-   IFS=","
-   prefixedAcls=''
+# store name => id #
+my %usersUid;
+my %groupsGid;
+my %sharesGid;
 
-   for acl in $1; do
+# get all classic users uids #
+open(my $ldbCall, "-|", "s4ldbsearch $baseUserDN,$baseDN sub user '()' uidNumber");
 
-      # check if we have acl #
-      if [ ! -z "$acl" ]; then
+while( my $userInfoLine = <$ldbCall> ) {
 
-         # first acl ? #
-         if [ ! -z "$prefixedAcls" ]; then
-            prefixedAcls="${prefixedAcls},"
-         fi
+   chomp($userInfoLine);
 
-         # check if default acls #
-         if echo "$acl" | grep -q '^d:'; then
-            prefixedAcls="${prefixedAcls}d:"
-            acl=${acl#d:}
-         fi
+   my @userInfo = split(/\t/, $userInfoLine);
+   if( defined($userInfo[1]) ) {
+      if( $userInfo[0] =~ m/^CN=(.*?),/ ) {
+         my $userName = $1;
+         my $userUid = $userInfo[1];
+         $usersUid{$userName} = $userUid;
+      }
+      else {
+         print("Error getting user uid !\n");
+         exit(1);
+      }
+   }
+}
 
-         # check if reconize acl #
-         if echo "$acl" | grep -q '^[ug]:.*:[r-][w-][x-]'; then
-            aclType=$(echo "$acl" | cut -d: -f1)
-            aclTarget=$(echo "$acl" | cut -d: -f2)
-            aclRights=$(echo "$acl" | cut -d: -f3)
+close($ldbCall);
+
+# get all classic groups gids #
+open($ldbCall, "-|", "s4ldbsearch $baseUserDN,$baseDN sub group '()' gidNumber");
+
+while( my $groupInfoLine = <$ldbCall> ) {
+
+   chomp($groupInfoLine);
+
+   my @groupInfo = split(/\t/, $groupInfoLine);
+   if( defined($groupInfo[1]) ) {
+      if( $groupInfo[0] =~ m/^CN=(.*?),/ ) {
+         my $groupName = $1;
+         my $groupGid = $groupInfo[1];
+         $groupsGid{$groupName} = $groupGid;
+      }
+      else {
+         print("Error getting group gid !\n");
+         exit(1);
+      }
+   }
+}
+
+close($ldbCall);
 
 
-            # if target not empty #
-            if [ ! -z "$aclTarget" ]; then
+# get all classic share gids #
+open($ldbCall, "-|", "s4ldbsearch $baseShareDN,$baseDN sub user '()' gidNumber");
 
-               # if target not prefixed #
-               if ! echo "$aclTarget" | grep -q '\\'; then
-                  aclTarget="${shortDomain}\\\\${aclTarget}"
-               fi
-            fi
-            prefixedAcls="${prefixedAcls}${aclType}:${aclTarget}:${aclRights}"
+while( my $shareInfoLine = <$ldbCall> ) {
 
-         else
-            # let the acl as it #
-            prefixedAcls="${prefixedAcls}${acl}"
-         fi
-      fi
-   done
+   chomp($shareInfoLine);
 
-   # restore IFS #
-   IFS="$IFS_BACK"
-   echo "$prefixedAcls"
+   my @shareInfo = split(/\t/, $shareInfoLine);
+   if( defined($shareInfo[1]) ) {
+      if( $shareInfo[0] =~ m/^CN=(.*?),/ ) {
+         my $shareName = $1;
+         my $shareGid = $shareInfo[1];
+         $sharesGid{$shareName} = $shareGid;
+      }
+      else {
+         print("Error getting share gid !\n");
+         exit(1);
+      }
+   }
+}
+
+close($ldbCall);
+
+
+
+sub getUserUid {
+
+   # get params, the user name #
+   my $userName = $_[0];
+
+   # check if we have the uid #
+   if( defined($usersUid{$userName}) {
+      return $usersUid{$userName};
+   } else {
+
+      # try to find the user #
+      open(my $ldbCall, "-|", "s4ldbsearch $baseDN sub user \"(cn=$userName)\" uidNumber");
+      my $userInfoLine;
+
+      while( $userInfoLine = <$ldbCall> ) { }
+      close($ldbCall)
+
+      # check if user found #
+      if( $? != 0 ) {
+         return -1;
+      } else {
+
+         # save the result #
+         my $userUid = (split(/\t/, $userInfoLine))[1];
+         $usersUid{$userName} = $userUid;
+         return $userUid;
+      }
+   }
 }
 
 
+sub getGroupGid {
+
+   # get params, the group name #
+   my $groupName = $_[0];
+
+   # check if we have the gid #
+   if( defined($usersUid{$userName}) {
+      return $usersUid{$userName};
+   } else {
+
+      # try to find the user #
+      open(my $ldbCall, "-|", "s4ldbsearch $baseDN sub user \"(cn=$userName)\" uidNumber");
+      my $userInfoLine;
+
+      while( $userInfoLine = <$ldbCall> ) { }
+      close($ldbCall)
+
+      # check if user found #
+      if( $? != 0 ) {
+         return -1;
+      } else {
+
+         # save the result #
+         my $userUid = (split(/\t/, $userInfoLine))[1];
+         $usersUid{$userName} = $userUid;
+         return $userUid;
+      }
+   }
+}
 
 
-###########
-#parse args
-###########
-while [[ -n "$@" ]]; do
+###############
+# ask library #
+###############
 
-    # test option #
-    OPTIND=1
-    while getopts ":hb:fd" opt; do
-        case $opt in
-            b)
-                baseClass=$OPTARG
-                ;;
-            f)
-                forceUpdate="yes"
-                ;;
-            d)
-                deleteDirs="yes"
-                ;;
-            h)
-                usage
-                ;;
-            \?)
-                echo "option -$OPTARG not recognized !"
-                usage
-                ;;
-            :)
-                echo "parameter of -$OPTARG not specified !"
-                exit 0
-                ;;
-        esac
-    done
+sub askYesOrNo {
 
-    # check classic args #
-    if [ $OPTIND != 1 ]; then
-       shift $((OPTIND-1))
-    else
-       remArgs="$remArgs $1"
-       shift 1
-    fi
-done
+   # get params, the questions #
+   my $question = $_[0];
 
-# reset args #
-if [ -n "$remArgs" ]; then
-    set $remArgs
-fi
+   # ask #
+   while( 1 ) {
+      print("$question ([y]es or [N]o): ");
+      my $rep = <>;
+      if( $rep =~ /^y(es|)$/ ) {
+         return 'yes';
+      elsif( $rep =~ /^no?$/ ) {
+         return 'no';
+      }
+   }
+}
 
 
-#################
-# analyse args
-#################
+##############
+# parse args #
+##############
 
-# no args #
-if [ $# -ne 0 ]; then
-    usage
-fi
+# the options #
+my $optBaseClass;
+my $optForce;
+my $optDelete;
+
+Getopt::Long::Configure("bundling","no_ignore_case");
+GetOptions("b|base-class" => \$optBaseClass,
+           "f|force" => \$optForce,
+           "d|delete" => \$optDelete) 
+          or displayUsage();
+
+# check args #
+if( @ARGV != 0 ){
+   displayUsage();
+}
+
 
 # check the delete option #
-if [ -n "$baseClass" ] && [ -n "$deleteDirs" ]; then
-   echo "The -b and -d options can't be used together"
-   exit 0
-fi
-
-# check the base class #
-if [ -z "$baseClass" ]; then
-   baseClassName=${baseUserDN#OU=}
-   baseClassGroup=${baseUserGroup}
-else
-   baseClassName=$baseClass
-   baseClassGroup=${baseClass,,}
-fi
-
-# search the class #
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$baseClassGroup)" | grep "dn: CN=$baseClassGroup,OU=$baseClassName")
-if [ -z "$searchClass" ]; then
-   echo "The class $baseClassName cannot be found !"
-   exit 0
-else
-   baseClassDN=${searchClass#dn: CN=$baseClassGroup,}
-   baseClassDN=${baseClassDN%$baseUserDN,$baseDN}
-fi
+# can be combined with base class as we touch each dircetory #
+# to check unused dirs #
+if ( defined($optBaseClass) && defined($optDelete) ) {
+   print("The -b and -d options can't be used together.\n");
+   exit(1);
+}
 
 
-# set the searching DN #
-baseClassUserDN="${baseClassDN}${baseUserDN},${baseDN}"
-baseClassShareDN="${baseClassDN}${baseShareDN},${baseDN}"
-serverHostname=$(hostname)
+# get the base class #
+my $baseClassName;
+
+if ( ! defined($optBaseClass) ) {
+   $baseClassName = substr($baseUserDN, length('OU='));
+} else {
+   $baseClassName = $optBaseClass;
+}
+
+# check the class exist #
+my $baseClassGroup;
+
+open(my $classCheckCall, "-|", "s4classcheck $baseClassName");
+while( my $classInfoLine = <$classCheckCall> ) {
+   if( $classInfoLine =~ m/Class group: (.*)$/ ) {
+      $baseClassGroup = $1;
+   }
+   elsif( $classInfoLine =~ m/Class DN: (.*)$/ ) {
+      $baseClassUserDN = $1;
+   }
+   elsif( $classInfoLine =~ m/Class share DN: (.*)$/ ) {
+      $baseClassShareDN = $1;
+   }
+}
+
+close($classCheckCall);
+if( $? != 0 ) {
+   print("Cannot find base class $baseClassName !\n");
+   exit(1);
+}
+
+###################
+# get system vars #
+###################
+
+# get hostname #
+my $hostname = hostname;
+
+# get time #
+my $baseTimestamp = time();
 
 
-# create the reference timestamp #
-touch /tmp/s4makeshareddirs_base_timestamp
-
-function touchDir {
-   if [ -e "$1" ]; then
-      touch "$1"
-      if [ "$forceUpdate" == "yes" ]; then
-         return 1
-      else
-         return 0
-      fi
-   else
-      mkdir -p "$1"
-      return 1
-   fi
+# update dir timestamp and return if #
+# the dir must be updated            #
+sub touchDir {
+   if ( -e $1 ) {
+      utime(undef, undef, $1);
+      if ( defined($optForce) ) {
+         return 1;
+      } else {
+         return 0;
+      }
+   } else {
+      make_path($1);
+      return 1;
+   }
 }
 
 ####################
@@ -193,129 +415,125 @@ function touchDir {
 ####################
 
 # save remote server #
-remoteHomeServers=''
+my %remoteHomeServers;
 
-# deleted later #
-oldHomeDirs=""
+# home directories that need to be deleted later #
+my @oldHomeDirs;
 
-userRecordFound="no"
+# get all users #
+open($ldbCall, "-|", "s4ldbsearch $baseClassUserDN,$baseDN sub user '()' cn unixHomeDirectory uidNumber gidNumber");
 
-while read searchLine; do
+while( my $userInfoLine = <$ldbCall> ) {
 
-   # check if record start #
-   if echo "$searchLine" | grep -q '^# record '; then
-      userRecordFound="yes"
-   fi
+   # get user info #
+   my ($userDn, $userName, $userHomeDirectory, $userUid, $userGid) = split(/\t/, $userInfoLine);
 
-   # read dn #
-   if echo "$searchLine" | grep -q '^dn: '; then
-      userDN=${searchLine#dn: }
-   fi
+   # get user class group #
+   if( $userDn =~ m/CN=$userCn,OU=(.*?),/ ) {
+      $userClassGroup = lc($1);
+   } else {
+      print("Cannot determine user $userCn class group !\n");
+      exit(1);
+   }
 
-   # read cn #
-   if echo "$searchLine" | grep -q '^cn: '; then
-      userName=${searchLine#cn: }
-   fi
+   # get user server #
+   my $userServer;
+   if( $userHomeDirectory =~ m/\/dnfs\/$homeShare\/(.*)\/$userName ) {
+      $userServer = $1;
+   } else {
+      print("Cannot determine user $userCn home server !\n");
+      exit(1);
+   }
 
-   # read unixHomeDirectory #
-   if echo "$searchLine" | grep -q '^unixHomeDirectory: '; then
-      userHomeDirectory=${searchLine#unixHomeDirectory: }
-   fi
+   ####################
+   # create user dirs #
+   ####################
 
-   # check if record end #
-   if [ -z "$searchLine" ]; then
-      if [ "$userRecordFound" == "yes" ]; then
+   # make class directory #
+   touchDir("/srv/nfs4/$shareShare/$userClassGroup");
+   touchDir("$dfsPath/$userClassGroup");
 
-         # get user class #
-         userClassName=${userDN#CN=$userName,OU=}
-         userClassName=$(echo "$userClassName" | cut -d, -f1)
-         userClassGroup=${userClassName,,}
+   # if user on current server create user directory #
+   if ( $userServer eq $serverHostname ) {
 
-         # get user server #
-         userServer=${userHomeDirectory#/dnfs/$homeShare/}
-         userServer=${userServer%/$userName}
+      #############################
+      # check some specials cases #
+      #############################
+      if ( -e $unixHomePath/$userName ) {
 
-         ####################
-         # create user dirs #
-         ####################
+         # check if the uid is correct #
+         my ($currentDirUid, $currentDirGid) = (stat($unixHomePath/$userName))[4,5];
 
-         # make class directory #
-         touchDir /srv/nfs4/$shareShare/$userClassGroup
-         touchDir $dfsPath/$userClassGroup
+         if ( $currentDirUid != $userUid) {
 
-         # if user on current server create user directory #
-         if [ "$userServer" == "$serverHostname" ]; then
+            # bad uid ! this must be an old user dir, delete or restore #
+            push @oldHomeDirs, $unixHomePath/$userName;
+            chown($userUid, $userGid, $unixHomePath/$userName);
+            system("setfacl -bk $unixHomePath/$userName");
+            chmod(0700, $unixHomePath/$userName);
 
-            #############################
-            # check some specials cases #
-            #############################
-            if [ -e "$unixHomePath/$userName" ]; then
+         } else {
 
-               # check if the uid is correct #
-               currentUserUid=$(id -u "$shortDomain\\$userName")
-               currentDirUid=$(stat -c "%u" $unixHomePath/$userName)
-               if [ "$currentUserUid" -ne "$currentDirUid" ]; then
+            # check if the gid is correct #
+            if ( $currentDirGid != $userGid ) {
 
-                  # bad uid ! this must be an old user dir, delete or restore #
-                  oldHomeDirs="${oldHomeDirs} $unixHomePath/$userName"
-                  chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
-                  setfacl -b $unixHomePath/$userName
-                  setfacl -k $unixHomePath/$userName
+                # bad gid ! may the user's class have changed #
+                print("Seems the ${userName}'s class have changed, restoring rights ...\n");
+                chown($userUid, $userGid, $unixHomePath/$userName);
+                system("setfacl -bk $unixHomePath/$userName");
+                chmod(0700, $unixHomePath/$userName);
+            }
+         }
+      }      
 
-               else
-                  # check if the gid is correct #
-                  #!! can't use id on DC to get gidNumber as it always return Domain Users !!#
-                  currentUserGid=$(getent group "$shortDomain\\$userClassGroup" | cut -d: -f3)
-                  currentDirGid=$(stat -c "%g" $unixHomePath/$userName)
-                  if [ "$currentUserGid" -ne "$currentDirGid" ]; then
+      # touch the directory, and update rights if force #
+      if( ! touchDir($unixHomePath/$userName) ) {
 
-                     # bad gid ! may the user's class have changed #
-                     echo "Seems the ${userName}'s class have changed, restoring rights ..."
-                     chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
-                     setfacl -b $unixHomePath/$userName
-                     setfacl -k $unixHomePath/$userName
-                  fi
-               fi
-            fi
+            chown($userUid, $userGid, $unixHomePath/$userName);
+            system("setfacl -bk $unixHomePath/$userName");
+            chmod(0700, $unixHomePath/$userName);
+      }
+   }
 
-            # create dirs #
-            if ! touchDir $unixHomePath/$userName; then
-               chown "$shortDomain\\$userName:$shortDomain\\$userClassGroup" $unixHomePath/$userName
-               chmod 700 $unixHomePath/$userName
-               setfacl -b $unixHomePath/$userName
-               setfacl -k $unixHomePath/$userName
-            fi
-         else
+   # if the user is not on this server, add to the remote servers list #
+   else {
+      $remoteHomeServers{$userServer} = 1;
+   }
+}
 
-            # save the remote home server #
-            if [ -z "$remoteHomeServers" ]; then
-               remoteHomeServers="$userServer"
-            else
-               remoteHomeServers="$remoteHomeServers $userServer"
-            fi
-         fi
-      fi
-      userRecordFound="no"
-   fi
+close($ldbCall);
 
-done < <(s4ldbsearch -H $samDatabase -b $baseClassUserDN '(objectClass=user)'  dn cn unixHomeDirectory)
+
+##################
+# get nfs params #
+##################
+
+# get template #
+open(my $exportTemplate, "<", "/etc/exports.d/export.template") or die("Cannot find nfs export template !\n");
+my $shareNfsTemplate = <$exportTemplate>;
+close($exportTemplate);
+
+# extract params #
+my $shareNFSParams = (split(" ", $shareNfsTemplate))[1];
 
 
 ######################################
 # create nfs home server redirection #
 ######################################
-for remoteHomeServer in $remoteHomeServers; do
+foreach my $remoteHomeServer (keys @remoteHomeServers) {
 
-   serverHomeShareDir="/srv/nfs4/$homeShare/$remoteHomeServer"
+   my $serverHomeShareDir="/srv/nfs4/$homeShare/$remoteHomeServer";
 
    # create directory #
-   touchDir "$serverHomeShareDir"
-   chown root:$baseUserGroup "$serverHomeShareDir"
-   chmod 777 "$serverHomeShareDir"
+   touchDir($serverHomeShareDir)
+   chown(0, $baseUserGroup, $serverHomeShareDir);
+   chmod(0777, $serverHomeShareDir);
 
    # create systemd unit #
-   systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount"
-   echo \
+   my $systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount";
+   open(my $systemdUnit, ">", $systemdUnitName) or die "Can't open $systemdUnitName !";
+
+   print $systemdUnit 
 "[Unit]
 
 [Mount]
@@ -326,181 +544,280 @@ Options=bind
 
 [Install]
 WantedBy=multi-user.target
-" > /lib/systemd/system/$systemdUnitName
+";
 
-   systemctl enable $systemdUnitName
-   systemctl start $systemdUnitName
+   close($systemdUnit);
 
+   system("systemctl enable $systemdUnitName");
+   system("systemctl start $systemdUnitName");
+
+   ###########################
    # create nfs4 redirection #
-   shareNfs=$(head /etc/exports.d/export.template)
-   shareNFSPath=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f1)
-   shareNFSParams=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f2)
-   shareNfs="$serverHomeShareDir  $shareNFSParams"
-   shareNfs=$(echo "$shareNfs" | sed s:\):,refer=/$homeShare/$remoteHomeServer@$remoteHomeServer\): )
-   echo "$shareNfs" > /etc/exports.d/home-redirection-$remoteHomeServer.exports
-done
+   ###########################
+
+   # add new referral params #
+   $shareNFSParamsWithReferral = substr($shareNFSParams, 0, -1) . ",refer=/$homeShare/$remoteHomeServer@$remoteHomeServer)");
+   
+   # create new share #
+   open($nfsShareExport, ">", "/etc/exports.d/home-redirection-$remoteHomeServer.exports");
+   print $nfsShareExport "$serverHomeShareDir $shareNFSParamsWithReferral";
+   close($nfsShareExport);
+
+}
+
 
 ######################
 # create shares dirs #
 ######################
-shareRecordFound="no"
 
-while read searchLine; do
+# get all shares #
+open($ldbCall, "-|", "s4ldbsearch $baseClassShareDN,$baseDN sub user '()' cn givenName description unixHomeDirectory memberOf");
 
-   # check if record start #
-   if echo "$searchLine" | grep -q '^# record '; then
-      shareRecordFound="yes"
-      shareShowClasses=""
-   fi
+while( my $shareInfoLine = <$ldbCall> ) {
 
-   # read dn #
-   if echo "$searchLine" | grep -q '^dn: '; then
-      shareDN=${searchLine#dn: }
-   fi
+   # get share info #
+   # givenName -> show name
+   # description -> rights owner,mod,acls
+   # unixHomeDirectory -> server 
+   # memberOf -> the classes that see the share  
+   my ($shareDN, $shareName, $shareShowName, $shareRights, $shareServer, $shareShowClassesList) = split(/\t/, $shareInfoLine);
 
-   # read cn #
-   if echo "$searchLine" | grep -q '^cn: '; then
-      shareName=${searchLine#cn: }
-   fi
+   # get share class group and DN #
+   my $shareClassName;
+   my $shareClassGroup;
+   my $shareClassGroupDN;
+
+   if( $shareDN =~ m/CN=$shareName,OU=(.*?),(.*),$baseShareDN,$baseDN$/ ) {
+      $shareClassName = $1;
+      $userClassGroup = lc($shareClassName);
+      $shareClassGroupDN = "CN=$userClassGroup,OU=$shareClassName,$2,$baseUserDN,$baseDN";
+   } else {
+      print("Cannot determine the share $shareName class group !\n");
+      exit(1);
+   }
 
    # get share class display name #
-   if echo "$searchLine" | grep -q '^gidNumber: '; then
+   my $shareClassDisplayName;
 
-      # get the DN of the class group #
-      shareClassGroupDN=${shareDN#CN=$shareName,}
-      shareClassName=$(echo $shareClassGroupDN | cut -d, -f1)
-      shareClassName=${shareClassName#OU=}
-      shareClassGroup=${shareClassName,,}
-      shareClassGroupDN=$(echo "$shareClassGroupDN" | sed "s/$baseShareDN,$baseDN/$baseUserDN,$baseDN/")
-      shareClassDisplayName=$(s4ldbsearch -H $samDatabase -b $shareClassGroupDN "(cn=$shareClassGroup)" displayName | grep 'displayName: ')
-      shareClassDisplayName=${shareClassDisplayName#displayName: }
-   fi
+   open(my $searchGroupCall , "-|", "s4ldbsearch $shareClassGroupDN base group '()' displayName)
+   my $shareClassGroupInfoLine = <$searchGroupCall>;
+   my $shareClassDisplayName = (split(/\t/, <$searchGroupCall>))[1];
+   close($searchGroupCall);
 
-   # read givenName containing show name #
-   if echo "$searchLine" | grep -q '^givenName: '; then
-      shareShowName=${searchLine#givenName: }
-   fi
+   if ( $? != 0 ) {
+      print("Cannot find $shareClassGroupDN !\n");
+      exit(1);
+   }
 
-   # read description containing rights #
-   if echo "$searchLine" | grep -q '^description: '; then
-      shareRights=${searchLine#description: }
-      shareOwner=$(echo "$shareRights" | cut -d, -f1)
-      shareMod=$(echo "$shareRights" | cut -d, -f2)
-      shareAcls=$(echo "$shareRights" | cut -d, -f3-)
-   fi
+   # get share show classes #
+   my @shareShowClasses = split(/|/, $shareShowClassesList);
 
-   # read unixHomeDirectory containing server #
-   if echo "$searchLine" | grep -q '^unixHomeDirectory: '; then
-      shareServer=${searchLine#unixHomeDirectory: }
-   fi
+   # get rights #
+   my (shareOwner,shareMod,shareAcls) = split(/,/, $shareRights);
+   
 
-   # read show classes stored in memberOf #
-   if echo "$searchLine" | grep -q '^memberOf: '; then
-      showClass=${searchLine#memberOf: CN=}
-      showClass=$(echo "$showClass" | cut -d, -f1)
-      shareShowClasses="$shareShowClasses ${showClass}"
-   fi
+   ##############
+   # get rights #
+   ##############
 
-   # check if record end #
-   if [ -z "$searchLine" ]; then
-      if [ "$shareRecordFound" == "yes" ]; then
+   my (shareOwnerUser, shareOwnerGroup) = split(/:/, $shareOwner);
 
-         ##############
-         # get rights #
-         ##############
-         shareOwnerUser=$(echo "$shareOwner" | cut -d: -f1)
-         shareOwnerGroup=$(echo "$shareOwner" | cut -d: -f2)
-         if [ "$shareOwnerUser" != "root" ]; then
-            shareOwnerUser="$shortDomain\\$shareOwnerUser"
-         fi
-         if [ "$shareOwnerGroup" != "root" ]; then
-            shareOwnerGroup="$shortDomain\\$shareOwnerGroup"
-         fi
+   my $shareOwnerUID;
+   if( $shareOwnerUser eq 'root' ) {
+      $shareOwnerUID = 0;
+   } else {
+      $shareOwnerUID = getUserUid($shareOwnerUser);
+   }
 
-         ############################
-         # create share directories #
-         ############################
-         if [ "$shareServer" == "$serverHostname" ]; then
-
-            # share directory #
-            if ! touchDir $unixSharePath/$shareName; then
-               chown "$shareOwnerUser:$shareOwnerGroup" $unixSharePath/$shareName
-               chmod $shareMod $unixSharePath/$shareName
-               setfacl -b $unixSharePath/$shareName
-               setfacl -k $unixSharePath/$shareName
-               if [ ! -z "$shareAcls" ]; then
-                  prefixedShareAcls=$(prefixAcls "$shareAcls")
-                  setfacl -m $prefixedShareAcls $unixSharePath/$shareName
-               fi
-            fi
-         fi
+   my $shareOwnerGID;
+   if( $shareOwnerGroup eq 'root' ) {
+      $shareOwnerGID = 0;
+   } else {
+      $shareOwnerGID = getGroupGid($shareOwnerGroup);
+   }
 
 
-         ########################
-         # create nfs/dfs links #
-         ########################
-         rm -f /etc/exports.d/$shareName.exports
-         for showClass in $shareShowClasses; do
 
-            nfsDFSRoot="/srv/nfs4/$shareShare"
-            sambaDFSRoot="$dfsPath"
+   ############################
+   # create share directories #
+   ############################
+   if( $hareServer eq $serverHostname ) {
 
-            # make dirs #
-            touchDir $nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
-            if [ "$shareServer" != "$serverHostname" ]; then
-               chown "$shareOwnerUser:$shareOwnerGroup" "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
-               chmod 777 "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
-            fi
-            touchDir $sambaDFSRoot/${showClass,,}/$shareClassDisplayName
+      # check share directory #
+      if( ! touchDir($unixSharePath/$shareName) ) {
 
-            # nfs share #
-            shareNfs=$(head /etc/exports.d/export.template)
-            shareNFSPath=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f1)
-            shareNFSParams=$(echo "$shareNfs" | tr -s ' ' | cut -d ' ' -f2)
-            shareNfs="$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName  $shareNFSParams"
+         chown($shareOwnerUID, $shareOwnerGID, $unixSharePath/$shareName)
+         chmod($shareMod, $unixSharePath/$shareName);
+         system("setfacl -bk $unixSharePath/$shareName");
+         #!!!
+         if( $shareAcls ) {
+            system("setfacl -m $shareAcls $unixSharePath/$shareName");
+         }
+      }
+   }
 
-            systemdUnitName=$(echo "$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName" | sed s,/,-,g )
-            systemdUnitName=${systemdUnitName#-}
-            systemdUnitName="${systemdUnitName}.mount"
 
-            if [ "$shareServer" == "$serverHostname" ]; then
-               mountTarget="$unixSharePath/$shareName"
-            else
-               mountTarget="$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName"
-               shareNfs=$(echo "$shareNfs" | sed s:\):,refer=/$shareShare/${showClass,,}/$shareClassDisplayName/$shareShowName@$shareServer\): )
-            fi
-            echo \
+   ########################
+   # create nfs/dfs links #
+   ########################
+   unlink("/etc/exports.d/$shareName.exports")
+
+   my $nfsDFSRoot = "/srv/nfs4/$shareShare";
+   my $sambaDFSRoot = "$dfsPath";
+
+   foreach my $showClass (@shareShowClasses) {
+
+      # make dirs #
+      # the nfs one and samba dfs one # 
+      my $shareShowDir = "$nfsDFSRoot/" . lc($showClass) . "/$shareClassDisplayName/$shareShowName";
+      my $sambaShareShowDir = "$sambaDFSRoot/" . lc($showClass) . "/$shareClassDisplayName/$shareShowName"";
+
+      touchDir($shareShowDir);
+      touchDir($sambaShareShowDir);
+
+      # nfs share #
+      my $shareNfs = "$shareShowDir $shareNFSParams"
+      my $systemdUnitName = $shareShowDir;
+      $systemdUnitName =~ s|/|-|g;
+      
+      # add referral if needed #
+      my $mountTarget;
+      if( $shareServer eq $serverHostname ) {
+         $mountTarget = "$unixSharePath/$shareName";
+      } else {
+         # bin mount to itself #
+         $mountTarget = $shareShowDir;
+         $shareNfs = substr($shareNfs, 0, -1) . ",refer=/$shareShare/${showClass,,}/$shareClassDisplayName/$shareShowName@$shareServer\)"; 
+      }
+
+      # write unit file #
+      open(my $unitFile, ">", "/lib/systemd/system/$systemdUnitName");
+      print $unitFile
 "[Unit]
 
 [Mount]
 What=$mountTarget
-Where=$nfsDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
+Where=$shareShowDir
 Type=none
 Options=bind
 
 [Install]
 WantedBy=multi-user.target
-" > /lib/systemd/system/$systemdUnitName
+";
 
-            systemctl enable $systemdUnitName
-            systemctl start $systemdUnitName
-            echo "$shareNfs" >> /etc/exports.d/$shareName.exports
+   system("systemctl enable $systemdUnitName");
+   system("systemctl start $systemdUnitName");
+   
+   # add show export #
+   open(my $shareExport, ">>", "/etc/exports.d/$shareName.exports");
+   print $shareExport "$shareNfs\n";
+   close($shareExport);
 
-            # dfs share #
-            ln -f -s msdfs:$shareServer\\$shareShare\\$shareName $sambaDFSRoot/${showClass,,}/$shareClassDisplayName/$shareShowName
-         done
-      fi
-      shareRecordFound="no"
-   fi
-
-done < <(s4ldbsearch -H $samDatabase -b $baseClassShareDN '(objectClass=user)'  dn cn gidNumber givenName description unixHomeDirectory memberOf)
+   # dfs share #
+   symlink("msdfs:$shareServer\\$shareShare\\$shareName", $sambaShareShowDir); 
+}
 
 # reload nfs #
-if which exportfs; then
-   exportfs -ra
-else
-   /usr/sbin/exportfs -ra
+system("/usr/sbin/exportfs -ra");
+
+#---------------------------------------------------
+
+###################
+# clean if needed #
+###################
+
+# old user dirs #
+foreach my $oldHomeDir (@oldHomeDirs) {
+
+   my changedUserName = basename($oldHomeDir);
+   my ($changedUserUid, $changedUserGid) = (stat($oldHomeDir))[4,5];
+   print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+   print("$oldHomeDir seems to be an old home dir.\n");
+   print("But a new user with the same name now exist.\n");
+   if( askYesOrNo("Would you like to delete the old files ? if not they will be given to the new user.") eq "yes" ) {
+      unlink($oldHomeDir);
+      touchDir($oldHomeDir);
+      chown($changedUserUid, $changedUserGid, $oldHomeDir);
+      chmod(0700, $oldHomeDir);
+   } else {
+      chown($changedUserUid, $changedUserGid, File::Finder->in($oldHomeDir));
+      chmod(0700, $oldHomeDir);
+      system("setfacl -R -bk $oldHomeDir");
+   }
+   print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+}
+
+
+# the others dirs #
+if( $optDelete ) {
+
+   # clean homes dirs #
+   my @badHomeDirs;
+   
+   # check all homes #
+   foreach my $homePath (<$unixHomePath/*>) {
+
+      # check if the directory is older #
+      if ( (stat($homePath))[9] < $baseTimestamp ) {
+         push @badHomeDirs, $homePath;
+      }
+   }
+
+   if( @badHomeDirs ) {
+
+      print("\n");
+      print("###############################################\n");
+      print(" The following home directories seems not used \n");
+      print("###############################################\n");
+
+      foreach my $badHomeDir (@badHomeDirs) {
+         print("$badHomeDir\n");
+      }
+
+      if( askYesOrNo("Would you like to delete them ?") eq "yes") {
+         
+
+
+      if [ $(ask_yes_or_no "Would you like to delete them ?") == "yes" ]; then
+         for badHomeDir in $badHomeDirs; do
+            rm -r $badHomeDir
+         done
+     fi
+   fi
+
+
+   # clean share dirs #
+   badShareDirs=""
+   for sharePath in $unixSharePath/*; do
+      if [ "$sharePath" -ot "/tmp/s4makeshareddirs_base_timestamp" ]; then
+         badShareDirs="${badShareDirs} ${sharePath}"
+      fi
+   done
+
+   if [ -n "$badShareDirs" ]; then
+      echo " "
+      echo "###############################################"
+      echo " The following share directories seems not used "
+      echo "###############################################"
+
+      for badShareDir in $badShareDirs; do
+         echo "$badShareDir"
+      done
+
+      if [ $(ask_yes_or_no "Would you like to delete them ?") == "yes" ]; then
+         for badShareDir in $badShareDirs; do
+            rm -r $badShareDir
+         done
+     fi
+   fi
+
+
+   # clean profiles dirs #
+   #!!!!!!!!!!!!!!!!!!!!#
+
 fi
+
+#--------------------------------------------------------
 
 ###################
 # clean if needed #

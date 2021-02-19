@@ -68,7 +68,7 @@ targetServer=$(echo "$targetServer" | cut -d. -f1)
 hostname=$(hostname)
 
 # check if the user exist #
-if ! wbinfo -i $userName > /dev/null 2>&1; then
+if ! userSearch=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" unixHomeDirectory); then
    echo "The user $userName does not exist !"
    exit 0
 fi
@@ -77,16 +77,9 @@ fi
 #####################
 # check user server #
 #####################
-userSearch=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" dn unixHomeDirectory)
-if [ "$?" != "0" ]; then
-   echo "Cannot find user current server !"
-   exit 0
-fi
-
-userDN=$(echo "$userSearch" | grep '^dn: ')
-
-sourceServer=$(echo "$userSearch" | grep 'unixHomeDirectory:')
-sourceServer=${sourceServer#unixHomeDirectory: /dnfs/$homeShare/}
+userDN=$(echo "$userSearch" | -f1)
+sourceServer=$(echo "$userSearch" | -f2)
+sourceServer=${sourceServer#/dnfs/$homeShare/}
 sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
 
 if [ -z "$userDN" ] || [ -z "$sourceServer" ]; then
@@ -250,7 +243,7 @@ fi
 # update account #
 ##################
 
-echo "$userDN
+echo "dn: $userDN
 changetype: modify
 replace: homeDirectory
 homeDirectory: \\\\${targetServer}\\${homeShare}\\${userName}

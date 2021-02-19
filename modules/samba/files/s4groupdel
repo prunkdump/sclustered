@@ -63,8 +63,8 @@ fi
 
 groupName=$1
 
-# check if the group already exit #
-if ! wbinfo --group-info $groupName > /dev/null 2>&1; then
+# check if the group exist #
+if ! s4ldbsearch $baseDN sub group "(cn=$groupName)" > /dev/null; then
    echo "The group $groupName don't exist !"
    exit 1
 fi

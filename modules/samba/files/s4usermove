@@ -63,7 +63,7 @@ fi
 
 # check username #
 userName=$1
-if ! wbinfo -i $userName > /dev/null 2>&1; then
+if ! searchClass=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)"); then
    echo "The user $userName does not exist !"
    exit 0
 fi
@@ -84,9 +84,7 @@ fi
 ##############################
 # get the current user class #
 ##############################
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN "(cn=$userName)" dn | grep "dn: CN=$userName")
-
-userCurrentClassDN=${searchClass#dn: CN=$userName,}
+userCurrentClassDN=${searchClass#CN=$userName,}
 userCurrentClassDN=${userCurrentClassDN%,$baseDN}
 
 if [ "$userCurrentClassDN" == "$userTargetClassDN" ]; then
@@ -97,9 +95,8 @@ fi
 ###################
 # get the new gid #
 ###################
-
-strgid=$(wbinfo --group-info="$userTargetClassGroup")
-userTargetGid=$(echo $strgid | cut -d ":" -f 3)
+strgid=$(s4ldbsearch CN=$userTargetClassGroup,$userTargetClassDN,$baseDN base group '()' gidNumber)
+userGid=$(echo "$strgid" | cut -f 2)
 
 # not needed anymore #
 #strsid=$(wbinfo --gid-to-sid=$userTargetGid)

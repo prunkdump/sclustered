@@ -68,8 +68,7 @@ studentName=$1
 # already done in s4userdel #
 
 # check if the account is a student #
-searchStudent=$(s4ldbsearch -H $samDatabase -b $baseStudentDN,$baseDN "(cn=$studentName)" dn | grep "dn: CN=$studentName,OU=.*,$baseStudentDN")
-if [ -z "$searchStudent" ]; then
+if ! s4ldbsearch $baseStudentDN,$baseDN sub user "(cn=$studentName)" > /dev/null; then
    echo "The user $studentName is not a student !"
    exit 0
 fi

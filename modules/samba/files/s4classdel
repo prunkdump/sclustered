@@ -100,7 +100,7 @@ echo "Computing what need to be deleted ..."
 
 
 # get the children OUs #
-childrenOUDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=organizationalUnit)' dn | grep '^dn: ' | sed "/^dn: $classDN/d" | sed 's/^dn: //')
+childrenOUDNs=$(s4ldbsearch $classDN,$baseDN sub ou '()' | sed "/^$classDN/d")
 
 # check the OU that are classes #
 childrenClassDNs=''
@@ -129,10 +129,10 @@ if [ ! -z "$childrenOUDNs" ]; then
 fi
 
 # get all the users in class #
-childrenUserDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=user)' dn | grep '^dn: ' | sed 's/^dn: //')
+childrenUserDNs=$(s4ldbsearch $classDN,$baseDN sub user '()')
 
 # get all the groups in class that are not class groups #
-childrenGroupDNs=$(s4ldbsearch -H $samDatabase -b $classDN,$baseDN '(objectClass=group)' dn | grep '^dn: ' | sed 's/^dn: //')
+childrenGroupDNs=$(s4ldbsearch $classDN,$baseDN sub group '()')
 childrenOtherGroupDNs=''
 
 if [ ! -z "$childrenGroupDNs" ]; then
@@ -150,7 +150,7 @@ if [ ! -z "$childrenGroupDNs" ]; then
 fi
 
 # get all the shares #
-childrenShareDNs=$(s4ldbsearch -H $samDatabase -b $classShareDN,$baseDN '(objectClass=user)' dn | grep '^dn: ' | sed 's/^dn: //')
+childrenShareDNs=$(s4ldbsearch $classShareDN,$baseDN sub user '()')
 
 ####################
 # print the result #

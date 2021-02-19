@@ -94,10 +94,10 @@ fi
 # create the class
 ###################
 
-# check if the class already exist #
-if wbinfo --group-info=$classGroup > /dev/null 2>&1; then
-   echo "The class $className already exist !"
-   exit 0
+# check if the class already exist or the group already used #
+if s4ldbsearch $baseDN sub group "(cn=$classGroup)" > /dev/null; then
+   echo "The class $className or the group $classGroup already exist !"
+   exit 1
 fi
 
 # create the organizational unit #

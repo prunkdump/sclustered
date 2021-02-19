@@ -1,18 +1,137 @@
-#!/bin/bash
+#! /usr/bin/perl -w
+use strict;
+use warnings;
+use utf8;
+use File::Basename;
 
-# wrapper to ldbsearch that remove newlines #
-lineBuild=""
-IFS=''
+# output as utf8 #
+binmode(STDOUT,':encoding(UTF-8)');
 
-while read -r searchLine; do
-   if $(echo "$searchLine" | grep -q '^ '); then
-      lineBuild="${lineBuild}${searchLine# }"
-   else
-      echo "$lineBuild"
-      lineBuild=$searchLine
-   fi
-done < <(ldbsearch "$@")
+sub displayUsage {
+   my $callerProgram = basename($0);
+   print("$callerProgram <base_dn> <base|sub|one> <user|group|ou|all> <search_cond> [attribute1] [attribute2] ...\n");
+   exit(0);
+}
 
-if ! $(echo "lineBuild" | grep -q '^ '); then
-   echo "$lineBuild"
-fi
+##############
+# check args #
+##############
+if( @ARGV < 3 ) {
+  displayUsage();
+}
+
+# get base dn #
+my $searchBase = $ARGV[0];
+
+# check scope #
+my $searchScope = $ARGV[1];
+if( ! ($searchScope eq "base" || $searchScope eq "sub" || $searchScope eq "one") ) {
+   print("Bad scope ! Should be base, sub or one.\n");
+   displayUsage();
+}
+
+# check object type #
+my $searchObjectType = $ARGV[2];
+if( ! ($searchObjectType eq "user" || $searchObjectType eq "group" || $searchObjectType eq "ou" || $searchObjectType eq "all") ) {
+   print("Bad object type ! Should be user, group, ou or *.\n");
+   displayUsage();
+}
+
+# check cond #
+my $searchCond = $ARGV[3];
+if( $searchCond =~ m/^\((.*)\)$/ ) {
+   $searchCond = "$1";
+}
+
+# get object type cond #
+my $objectTypeCond;
+if( $searchObjectType eq 'user' ) {
+   $objectTypeCond = "objectClass=user";
+}
+elsif( $searchObjectType eq 'group' ) {
+   $objectTypeCond = "objectClass=group";
+}
+elsif( $searchObjectType eq 'ou' ) {
+   $objectTypeCond = "objectClass=organizationalUnit";
+}
+else {
+   $objectTypeCond = "objectClass=*";
+}
+
+# build cond #
+if( $searchCond =~ /^\s*$/ ) {
+   $searchCond = "'($objectTypeCond)'";
+} else {
+   $searchCond = "'(&($objectTypeCond)($searchCond))'";
+}
+
+# get attributes #
+my @searchAttr = @ARGV[4..$#ARGV];
+
+##############
+# run search #
+##############
+my @searchResult;
+my $currentResult;
+
+open(my $ldbCall, "-|", "ldbsearch --show-binary -H /var/lib/samba/private/sam.ldb -b $searchBase -s $searchScope $searchCond " . join(' ', @searchAttr) );
+
+while( my $searchLine = <$ldbCall> ) {
+
+   chomp($searchLine);
+
+   # check record beginning #
+   if( $searchLine =~ m/dn: (.*)$/ ) {
+
+      # allocate new array of correct size #
+      my @newResult = ();
+      $#newResult = $#searchAttr + 1;
+      $currentResult = \@newResult;
+
+      # save dn #
+      $currentResult->[0] = $1;
+   }
+
+   if( defined($currentResult) ) {
+
+      # check record end #
+      if( $searchLine eq '' ) {
+         push @searchResult, $currentResult;
+         $currentResult = undef;
+      }
+
+      # check attributes #
+      foreach my $attrIdx (0..$#searchAttr) {
+
+         if( $searchLine =~ m/$searchAttr[$attrIdx]: (.*)$/ ) {
+            my $attrValue = $1;
+
+            # save attribute #
+            if( ! defined($currentResult->[$attrIdx + 1]) ) {
+               $currentResult->[$attrIdx + 1] = $attrValue;
+            } else {
+               $currentResult->[$attrIdx + 1] .= "|$attrValue";
+            }
+         }
+      }
+   }
+}
+
+
+#################
+# output result #
+#################
+close($ldbCall);
+if( $? != 0 ) {
+   exit(1);
+}
+
+if( @searchResult == 0 ) {
+   exit(1);
+}
+
+foreach my $result (@searchResult) {
+   print( join("\t", map { defined($_) ? $_ : '' } @$result) . "\n");
+}
+
+exit(0);

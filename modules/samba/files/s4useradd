@@ -75,7 +75,7 @@ if [ ${#userName} -lt $minLoginLength ]; then
 fi
 
 # check if the user already exist #
-if wbinfo -i $userName > /dev/null 2>&1; then
+if s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" > /dev/null; then
    echo "The user already exist !"
    exit 0
 fi
@@ -105,7 +105,6 @@ if [ -z "$userServer" ]; then
    userServer=$(hostname)
 fi
 
-
 # check the password #
 if [ -z "$userPasswd" ]; then
    userPasswd=$userName
@@ -117,16 +116,14 @@ fi
 ###############################
 
 # get the new uid #
-userUid=$(s4ldbsearch -H $samDatabase -s base -b CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN msSFU30MaxUidNumber | grep 'msSFU30MaxUidNumber:')
+userUid=$(s4ldbsearch CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN base all '()' msSFU30MaxUidNumber | cut -f2)
 if [ -z "$userUid" ]; then
    userUid="$baseUid"
-else
-   userUid=$(echo $userUid | sed 's/^msSFU30MaxUidNumber: \(.*\)/\1/')
 fi
 
 # get the gid #
-strgid=$(wbinfo --group-info="$userClassGroup")
-userGid=$(echo $strgid | cut -d ":" -f 3)
+strgid=$(s4ldbsearch CN=$userClassGroup,$userClassDN,$baseDN base group '()' gidNumber)
+userGid=$(echo "$strgid" | cut -f2)
 
 
 #################

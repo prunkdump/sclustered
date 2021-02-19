@@ -63,11 +63,12 @@ fi
 # parse username #
 userName=$1
 
-# check if the user already exist #
-if ! wbinfo -i $userName > /dev/null 2>&1; then
+# check if the user exist #
+if ! s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" > /dev/null; then
    echo "The user $userName does not exist !"
    exit 0
 fi
+
 
 ###################
 # delete the user #

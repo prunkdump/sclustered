@@ -241,17 +241,6 @@ sub getLogin {
    return $login;
 }
 
-sub getLdbData {
-   my ($param, $string) = @_;
-
-   # check utf8 encoded with base64 # 
-   if( $string =~ m/${param}:: / ){
-      return decode('UTF-8',decode_base64(substr($string, length("${param}:: "))));
-   } else {
-      return substr($string, length("${param}: "));
-   }
-}
-   
 
 #######################
 #  LDB base           #
@@ -261,64 +250,29 @@ use XML::LibXML::Simple;
 
 sub GetLDBStudents {
 
-   open(LDBS,"s4ldbsearch -H $samDatabase -b $studentBaseDN 'objectClass=user' cn sn givenName serialNumber employeeNumber displayName telephoneNumber mail|") or die("Cannot launch s4ldbsearch command");
+   open(LDBS,"s4ldbsearch $studentBaseDN sub user '()' cn sn givenName serialNumber employeeNumber displayName telephoneNumber mail|") or die("Cannot launch s4ldbsearch command");
 
    # build the user list #
    my @ldbusers;
+   my $userIdx = 0;
+   while( my $userInfoLine = <LDBS> ) {
 
-   # find the first user #
-   my $line = <LDBS>;
-   while( defined($line) && $line !~ m/dn: / ){
-      $line = <LDBS>;
-   }
+      my @userInfo = split(/\t/, $userInfoLine);
+      my @userDNParts = split(/,/, $userInfo[0]);
 
-   # main loop #
-   my $i = -1;
-   while( defined($line) ){
-      chomp($line);
-
-      # go to the next user and save class  #
-      if( $line =~ m/dn: / ) {
-         $i++;
-         my $dn = substr($line, length('dn: '));
-         my @dnArray = split(/,/,$dn);
-         $ldbusers[$i]{'class'} = substr($dnArray[1], length('OU='));
-      }
-      # cn entry #
-      elsif( $line =~ m/cn: / ){
-         $ldbusers[$i]{'login'} = lc(substr($line, length('cn: ')));
-      }
-      # sn entry #
-      elsif( $line =~ m/sn:/ ){
-         $ldbusers[$i]{'surName'} = getLdbData('sn', $line);
-      }
-      # givenName entry #
-      elsif( $line =~ m/givenName:/ ){
-         $ldbusers[$i]{'givenName'} = getLdbData('givenName', $line);
-      }
-      # serialNumber entry #
-      elsif( $line =~ m/serialNumber: / ){
-         $ldbusers[$i]{'id'} = lc(substr($line, length('serialNumber: ')));
-      }
-      # employeeNumber entry #
-      elsif( $line =~ m/employeeNumber: / ){
-         $ldbusers[$i]{'localId'} = lc(substr($line, length('employeeNumber: ')));
-      }
-      # displayName entry #
-      elsif( $line =~ m/displayName:/ ){
-         $ldbusers[$i]{'completeName'} = getLdbData('displayName', $line);
-      }
-      # telephoneNumber entry #
-      elsif( $line =~ m/telephoneNumber: / ){
-         $ldbusers[$i]{'telephoneNumber'} = substr($line, length('telephoneNumber: '));
-      }
-      # mail entry #
-      elsif( $line =~ m/mail: / ){
-         $ldbusers[$i]{'mail'} = lc(substr($line, length('mail: ')));
+      $ldbusers[$userIdx]{'class'} = substr($userDNParts[1], length('OU='));
+      $ldbusers[$userIdx]{'login'} = $userInfo[1];
+      $ldbusers[$userIdx]{'surName'} = $userInfo[2];
+      $ldbusers[$userIdx]{'givenName'} = $userInfo[3];
+      $ldbusers[$userIdx]{'id'} = lc($userInfo[4]);
+      $ldbusers[$userIdx]{'localId'} = lc($userInfo[5]);
+      $ldbusers[$userIdx]{'completeName'} = $userInfo[6];
+      $ldbusers[$userIdx]{'telephoneNumber'} = $userInfo[7];
+      $ldbusers[$userIdx]{'mail'} = lc($userInfo[8]);
       }
 
-      #next line
-      $line = <LDBS>;
+      # next user #
+      $userIdx++;
    }
 
    close(LDBS);
@@ -560,12 +514,12 @@ my $baseClassDirHdl;
 #closedir($baseClassDirHdl);
 
 my @localClasses;
-open(LDBS,"s4ldbsearch -H $samDatabase -s one -b $studentBaseDN '(objectClass=organizationalUnit)' ou |") or die("Cannot launch s4ldbsearch command");
+#this select the studentBaseStudentDN ou, but this is not a problem to test the inclusion
+open(LDBS,"s4ldbsearch $studentBaseDN one ou '()' ou |") or die("Cannot launch s4ldbsearch command");
 while( my $line = <LDBS> ) {
    chomp($line);
-   if( $line =~ /^ou: (.*?)$/ ) {
-      push @localClasses, "$1";
-   }
+   my $class = (split(/\t/, $line))[1];
+   push @localClasses, $class;
 }
      
 

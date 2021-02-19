@@ -68,94 +68,84 @@ if [ $# -gt 1 ]; then
 fi
 
 # get class name #
-if [ ! -z "$1" ]; then
-   className="$1"
-fi
+className="$1"
 
 # check the class group #
 if [ ! -z "$classGroup" ]; then
    classGroup=${classGroup,,}
-fi
-
-# if the class name is not set #
-# try to find it with the group #
-if [ -z "$className" ]; then
-
-   searchCond=''
-
-   if [ ! -z "$classGroup" ]; then
-      searchCond="${searchCond}(cn=$classGroup)"
-   fi
-
-   if [ ! -z "$classShowName" ]; then
-      searchCond="${searchCond}(displayName=$classShowName)"
-   fi
-
-   if [ -z "$searchCond" ]; then
-      usage
-   fi
-
-   searchCond="(&(objectClass=group)${searchCond})"
-
-   searchClass=''
-   searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN $searchCond dn | grep '^dn: ')
-   if [ -z "$searchClass" ]; then
-      echo "No class found !"
-      exit 1
-   else
-      resultCount=$(echo "$searchClass" | wc -l)
-      if [ "$resultCount" -ne "1" ]; then
-         echo "Multiple classes found !"
+   if [ ! -z "$className" ]; then
+      if [ "${className,,}" != "$classGroup" ]; then
+         echo "Error : The class group must be the class name in lowercase !"
          exit 1
       fi
-
-      # read the class name  #
-      # the OU containing the group #
-      # (no need to remove the dn: part as we use -f2 ) #
-      className=$(echo "$searchClass" | cut -d, -f2)
-      className=${className#OU=}
    fi
 fi
 
+########################
+# find the class group #
+########################
 
-# get the class group #
-if [ -z "$classGroup" ]; then
+# get the group name if possible
+if [ ! -z "$className" ]; then
    classGroup=${className,,}
 fi
 
-# search the class OU and the group #
-searchCond="(cn=$classGroup)"
-if [ ! -z "$classShowName" ]; then
-   searchCond="${searchCond}(displayName=$classShowName)"
+# build search cond #
+if [ ! -z "$classGroup" ]; then
+   searchCond="(cn=$classGroup)"
 fi
-searchCond="(&(objectClass=group)${searchCond})"
 
-searchClass=''
-searchClass=$(s4ldbsearch -H $samDatabase -b $baseUserDN,$baseDN $searchCond  dn | grep "^dn: CN=$classGroup,OU=$className")
+if [ ! -z "$classShowName" ]; then
+   if [ -z "$searchCond" ]; then
+      searchCond="(displayName=$classShowName)"
+   else
+      searchCond="(&${searchCond}(displayName=$classShowName)"
+   fi
+fi
 
-if [ -z "$searchClass" ]; then
-   echo "The class cannot be found !"
+# check search cond #
+if [ -z "$searchCond" ]; then
+   usage
+fi
+
+# search #
+searchClass=$(s4ldbsearch $baseUserDN,$baseDN sub group $searchCond)
+if [ "$?" -ne "0" ]; then
+   echo "No class found !"
    exit 1
 else
-
-   # check the corresponding share OU #
-   classDN=${searchClass#dn: CN=$classGroup,}
-   classDN=${classDN%,$baseDN}
-   classShareDN=${classDN%$baseUserDN}
-   classShareDN="${classShareDN}$baseShareDN"
-
-   OUName=$(echo "$classShareDN" | cut -d, -f1)
-   OUName=${OUName#OU=}
-
-   searchCond="(&(objectClass=organizationalUnit)(ou=$OUName))"
-   searchClass=''
-   searchClass=$(s4ldbsearch -H $samDatabase -b $classShareDN,$baseDN $searchCond  dn | grep "^dn: ")
-
-   if [ -z "$searchClass" ]; then
-      echo "Cannot found the share OU of the class $className !"
-      exit 1
+   resultCount=$(echo "$searchClass" | wc -l)
+   if [ "$resultCount" -ne "1" ]; then
+      echo "Multiple classes found !"
    fi
+fi
 
+# rebuild the class name/group if needed #
+if [ -z "$className" ]; then
+
+   # read the class name  #
+   # the OU containing the group #
+   # (no need to remove the dn: part as we use -f2 ) #
+   className=$(echo "$searchClass" | cut -d, -f2)
+   className=${className#OU=}
+   classGroup=${className,,}
+fi
+
+
+######################
+# check the share dn #
+######################
+
+# check the corresponding share OU #
+classDN=${searchClass#CN=$classGroup,}
+classDN=${classDN%,$baseDN}
+classShareDN=${classDN%$baseUserDN}
+classShareDN="${classShareDN}$baseShareDN"
+
+searchClass=$(s4ldbsearch $classShareDN,$baseDN base ou '()')
+if [ "$?" -ne "0" ]; then
+   echo "Cannot found the share OU of the class $className ! Maybe not a class group."
+   exit 1
 fi
 
 echo "Class Name: $className"

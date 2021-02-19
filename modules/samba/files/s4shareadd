@@ -153,7 +153,7 @@ shareClassGroup=${shareClassGroup#Class group: }
 shareName="${shareClassGroup}.${1,,}"
 
 # check if the share already exist #
-if wbinfo --user-info $shareName > /dev/null 2>&1; then
+if s4ldbsearch $baseShareDN,$baseDN sub user "(cn=$shareName)" > /dev/null; then
    echo "The share $shareName already exist !"
    exit 1
 fi
@@ -193,8 +193,7 @@ fi
 
 # check owner user #
 if [ "$shareOwnerUser" != "root" ]; then
-   struid=$(wbinfo --user-info="$shareOwnerUser")
-   if [ $? -ne 0 ]; then
+   if ! s4ldbsearch $baseDN sub user "(cn=$shareOwnerUser)" > /dev/null; then
       echo "User $shareOwnerUser not found !"
       exit 1
    fi
@@ -202,11 +201,10 @@ fi
 
 # check owner group #
 if [ "$shareOwnerGroup" != "root" ]; then
-   strgid=$(wbinfo --group-info="$shareOwnerGroup")
-   if [ $? -ne 0 ]; then
-     echo "Group $shareOwnerGroup not found !"
-     exit 1
-  fi
+   if ! s4ldbsearch $baseDN sub group "(cn=$shareOwnerGroup)" > /dev/null; then
+      echo "Group $shareOwnerGroup not found !"
+      exit 1
+   fi
 fi
 
 
@@ -230,16 +228,16 @@ fi
 ###############################
 
 # get the new uid #
-userUid=$(s4ldbsearch -H $samDatabase -s base -b CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN msSFU30MaxUidNumber | grep 'msSFU30MaxUidNumber:')
+userUid=$(s4ldbsearch CN=$shortDomain,CN=ypservers,CN=ypServ30,CN=RpcServices,CN=System,$baseDN base all '()' msSFU30MaxUidNumber | cut -f2)
 if [ -z "$userUid" ]; then
    userUid="$baseUid"
-else
-   userUid=$(echo $userUid | sed 's/^msSFU30MaxUidNumber: \(.*\)/\1/')
 fi
 
 # get the gid #
-strgid=$(wbinfo --group-info="$shareClassGroup")
-userGid=$(echo $strgid | cut -d ":" -f 3)
+shareClassGroupDN=$(echo "$shareClassInfo" | grep '^Class DN: ')
+shareClassGroupDN=${shareClassDN#Class DN: }
+strgid=$(s4ldbsearch CN=$shareClassGroup,$shareClassGroupDN,$baseDN base group '()' gidNumber)
+userGid=$(echo $strgid | cut -f2)
 
 
 #################
@@ -277,10 +275,10 @@ ldbmodify --url=$samDatabase -b $baseDN /tmp/$shareName
 rm /tmp/$shareName
 
 
-######################
-# associate the share
-# with the show classes
-######################
+#########################
+# associate the share   #
+# with the show classes #
+#########################
 IFS=','
 for shareShowClass in $shareShowClasses; do
    samba-tool group addmembers ${shareShowClass,,} $shareName
@@ -288,9 +286,9 @@ done
 unset IFS
 
 
-############
-# ok
-############
+#######
+# ok  #
+#######
 echo "Share created on AD !"
 echo "##################################################"
 echo "# !!! Launch s4makeshareddirs on the servers !!! #"
