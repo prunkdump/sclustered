@@ -65,19 +65,16 @@ fi
 studentName=$1
 studentTargetClassName=$2
 
-# check if the student account exist #
-# already done in s4usermove #
-
 # check if the account is a student #
 if ! s4ldbsearch $baseStudentDN,$baseDN sub user "(cn=$studentName)" > /dev/null; then
    echo "The user $studentName is not a student !"
-   exit 0
+   exit 1
 fi
 
 # check if the class exist #
 if ! studentTargetClassInfo=$(s4classcheck $studentTargetClassName); then
-   echo "The student class $studentTargetClassName cannot be found !"
-   exit 0
+   echo "The class $studentTargetClassName cannot be found !"
+   exit 1
 fi
 
 # check if the target class is a student's class #
@@ -85,7 +82,7 @@ studentTargetClassDN=$(echo "$studentTargetClassInfo" | grep '^Class DN: ')
 studentTargetClassDN=${studentTargetClassDN#Class DN: }
 if ! echo "$studentTargetClassDN" | grep -q "$baseStudentDN\$"; then
    echo "The student class $studentTargetClassName is not a student class !"
-   exit 0
+   exit 1
 fi
 
 ####################
@@ -93,5 +90,3 @@ fi
 ####################
 
 s4usermove $studentName $studentTargetClassName
-
-

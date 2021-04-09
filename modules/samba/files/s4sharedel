@@ -87,3 +87,8 @@ fi
 ####################
 samba-tool user delete $shareName
 echo "Share $shareName deleted !"
+
+echo "##################################################"
+echo "# !!! Launch s4makeshareddirs on the servers !!! #"
+echo "# !!! to update the network shares.          !!! #"
+echo "##################################################"

@@ -76,10 +76,9 @@ fi
 
 # check if the user already exist #
 if s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" > /dev/null; then
-   echo "The user already exist !"
-   exit 0
+   echo "The user $userName already exist !"
+   exit 1
 fi
-
 
 # check the base class #
 if [ -z "$2" ]; then

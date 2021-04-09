@@ -64,9 +64,6 @@ fi
 # parse username #
 teacherName=$1
 
-# check if the teacher account exist #
-# already done in s4userdel #
-
 # check if the account is a teacher #
 if ! s4ldbsearch $baseTeacherDN,$baseDN sub user "(cn=$teacherName)" > /dev/null; then
    echo "The user $teacherName is not a teacher !"

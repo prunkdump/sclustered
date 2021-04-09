@@ -86,6 +86,7 @@ if echo "$shareShowClasses" | grep -q ':'; then
    primaryShareShowClass=$(echo "$shareShowClasses" | cut -d: -f1)
 fi
 
+# primary can be empty #
 if [ ! -z "$primaryShareShowClass" ]; then
    shareShowClasses="${primaryShareShowClass},${shareShowClasses#${primaryShareShowClass}:}"
 fi
@@ -166,7 +167,7 @@ sharePermissions=$3
 if [ -z "$sharePermissions" ]; then
    sharePermissions="0550"
 else
-   # check mod #
+   # check mod, if we don't have, add it #
    sharePermissionsMod=$(echo "$sharePermissions" | cut -d, -f1)
    if ! echo "$sharePermissionsMod" | grep -q -E '^[0-2]?[0-7][0-7][0-7]$'; then
       sharePermissions="0555,$sharePermissions"
@@ -235,9 +236,9 @@ fi
 
 # get the gid #
 shareClassGroupDN=$(echo "$shareClassInfo" | grep '^Class DN: ')
-shareClassGroupDN=${shareClassDN#Class DN: }
+shareClassGroupDN=${shareClassGroupDN#Class DN: }
 strgid=$(s4ldbsearch CN=$shareClassGroup,$shareClassGroupDN,$baseDN base group '()' gidNumber)
-userGid=$(echo $strgid | cut -f2)
+userGid=$(echo "$strgid" | cut -f2)
 
 
 #################
@@ -284,7 +285,6 @@ for shareShowClass in $shareShowClasses; do
    samba-tool group addmembers ${shareShowClass,,} $shareName
 done
 unset IFS
-
 
 #######
 # ok  #

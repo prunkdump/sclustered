@@ -71,6 +71,7 @@ classGroup=${1,,}
 # check the base class #
 if [ -z "$baseClass" ]; then
    baseClassGroup=${baseUserGroup}
+   baseClassDN=''
 else
    baseClassName=${baseClass}
    if ! baseClassInfo=$(s4classcheck $baseClassName); then
@@ -101,6 +102,7 @@ if s4ldbsearch $baseDN sub group "(cn=$classGroup)" > /dev/null; then
 fi
 
 # create the organizational unit #
+# ${baseClassDN} can be empty #
 echo "create $className organizational units."
 samba-tool ou create "OU=${className},${baseClassDN}${baseUserDN},${baseDN}"
 samba-tool ou create "OU=${className},${baseClassDN}${baseShareDN},${baseDN}"

@@ -96,7 +96,7 @@ fi
 # get the new gid #
 ###################
 strgid=$(s4ldbsearch CN=$userTargetClassGroup,$userTargetClassDN,$baseDN base group '()' gidNumber)
-userGid=$(echo "$strgid" | cut -f 2)
+userTargetGid=$(echo "$strgid" | cut -f 2)
 
 # not needed anymore #
 #strsid=$(wbinfo --gid-to-sid=$userTargetGid)
@@ -115,13 +115,9 @@ echo "dn: CN=$userName,$userCurrentClassDN,$baseDN
 changetype: moddn
 newrdn: CN=$userName
 deleteoldrdn: 1
-newsuperior: $userTargetClassDN,$baseDN" > /tmp/$userName
+newsuperior: $userTargetClassDN,$baseDN
 
-ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
-rm /tmp/$userName
-
-# change LDAP entry #
-echo "dn: CN=$userName,$userTargetClassDN,$baseDN
+dn: CN=$userName,$userTargetClassDN,$baseDN
 changetype: modify
 replace: gidnumber
 gidnumber: $userTargetGid" > /tmp/$userName

@@ -3,11 +3,12 @@ use strict;
 use warnings;
 use utf8;
 use File::Basename;
-use File::Path;
+use File::Path qw(make_path rmtree);
 use File::Find;
 use Getopt::Long;
 use Sys::Hostname;
 use Linux::ACL;
+use Time::Piece;
 
 # output as utf8 #
 binmode(STDOUT,':encoding(UTF-8)');
@@ -17,10 +18,12 @@ binmode(STDOUT,':encoding(UTF-8)');
 #########
 sub displayUsage {
    my $callerProgram = basename($0);
-   print("usage: $0 [-b baseClass] [-f] [-d]");
-   print("   -b : update only dirs belonging to baseClass");
-   print("   -f : force updating share permissions");
-   print("   -d : delete unused dirs, asking for confirmation");
+   print("usage: $0 [-c baseClass] [-f] [-d] [-n] [-b backupDir]\n");
+   print("   -c : update only dirs belonging to baseClass\n");
+   print("   -f : force updating all shares and permissions, still interactive\n");
+   print("   -d : delete unused data dirs, ask for confirmation if no backup dir is given\n");
+   print("   -n : no interractive, delete data dirs only if backup dir is given\n");
+   print("   -b : directory where backup before delete\n");
    exit(0);
 }
 
@@ -44,7 +47,6 @@ my $profileShare;
 my $unixSharePath;
 my $shareShare;
 
- 
 
 # open main configuration file #
 open(my $sambaConf, "< $s4ConfFile") or die("Cannot read $s4ConfFile");
@@ -118,86 +120,13 @@ if( ! ( defined($baseDN) &&
 }
 
 
-###########################
-# uid/gid mapping library #
-###########################
+#######################
+# ldb caching library #
+#######################
 
 # store name => id #
 my %usersUid;
 my %groupsGid;
-#my %sharesGid;
-
-
-# get all classic users uids #
-#open(my $ldbCall, "-|", "s4ldbsearch $baseUserDN,$baseDN sub user '()' uidNumber");
-#
-#while( my $userInfoLine = <$ldbCall> ) {
-#
-#   chomp($userInfoLine);
-#
-#   my @userInfo = split(/\t/, $userInfoLine);
-#   if( defined($userInfo[1]) ) {
-#      if( $userInfo[0] =~ m/^CN=(.*?),/ ) {
-#         my $userName = $1;
-#         my $userUid = $userInfo[1];
-#         $usersUid{$userName} = $userUid;
-#      }
-#      else {
-#         print("Error getting user uid !\n");
-#         exit(1);
-#      }
-#   }
-#}
-#
-#close($ldbCall);
-
-# get all classic groups gids #
-#open($ldbCall, "-|", "s4ldbsearch $baseUserDN,$baseDN sub group '()' gidNumber");
-#
-#while( my $groupInfoLine = <$ldbCall> ) {
-#
-#   chomp($groupInfoLine);
-#
-#   my @groupInfo = split(/\t/, $groupInfoLine);
-#   if( defined($groupInfo[1]) ) {
-#      if( $groupInfo[0] =~ m/^CN=(.*?),/ ) {
-#         my $groupName = $1;
-#         my $groupGid = $groupInfo[1];
-#         $groupsGid{$groupName} = $groupGid;
-#      }
-#      else {
-#         print("Error getting group gid !\n");
-#         exit(1);
-#      }
-#   }
-#}
-#
-#close($ldbCall);
-
-
-# get all classic share gids #
-#open($ldbCall, "-|", "s4ldbsearch $baseShareDN,$baseDN sub user '()' gidNumber");
-#
-#while( my $shareInfoLine = <$ldbCall> ) {
-#
-#   chomp($shareInfoLine);
-#
-#   my @shareInfo = split(/\t/, $shareInfoLine);
-#   if( defined($shareInfo[1]) ) {
-#      if( $shareInfo[0] =~ m/^CN=(.*?),/ ) {
-#         my $shareName = $1;
-#         my $shareGid = $shareInfo[1];
-#         $sharesGid{$shareName} = $shareGid;
-#      }
-#      else {
-#         print("Error getting share gid !\n");
-#         exit(1);
-#      }
-#   }
-#}
-#
-#close($ldbCall);
-
 
 sub getUserUid {
 
@@ -205,26 +134,25 @@ sub getUserUid {
    my $userName = $_[0];
 
    # check if we have the uid #
-   if( defined($usersUid{$userName}) {
+   if( defined($usersUid{$userName}) ) {
       return $usersUid{$userName};
    }
 
    # try to find the user, we use baseDN as the user may be a system user #
    open(my $ldbCall, "-|", "s4ldbsearch $baseDN sub user \"(cn=$userName)\" uidNumber");
-
-   my $userInfoLine;
-   while( $userInfoLine = <$ldbCall> ) { }
-   close($ldbCall)
+   my $userInfoLine = <$ldbCall>;
+   close($ldbCall);
 
    # check if user found #
    if( $? != 0 ) {
-      print("User $userName UID not found ! Check AD database for errors !\");
+      print("User $userName UID not found ! Check AD database for errors !");
       exit(1);
    } else {
 
       # save the result #
       chomp($userInfoLine);
-      my $userUid = (split(/\t/, $userInfoLine))[1];
+      my $userUid;
+      $userUid  = (split(/\t/, $userInfoLine))[1];
       $usersUid{$userName} = $userUid;
       return $userUid;
    }
@@ -237,20 +165,18 @@ sub getGroupGid {
    my $groupName = $_[0];
 
    # check if we have the gid #
-   if( defined($groupsGid{$groupName}) {
+   if( defined($groupsGid{$groupName}) ) {
       return $groupsGid{$groupName};
    }
 
    # try to find the group, we use baseDN as this may be a system group #
    open(my $ldbCall, "-|", "s4ldbsearch $baseDN sub group \"(cn=$groupName)\" gidNumber");
-
-   my $groupInfoLine;
-   while( $groupInfoLine = <$ldbCall> ) { }
-   close($ldbCall)
+   my $groupInfoLine = <$ldbCall>;
+   close($ldbCall);
 
    # check if group found #
    if( $? != 0 ) {
-      print("Group $groupName GID not found ! Check AD database for errors !\");
+      print("Group $groupName GID not found ! Check AD database for errors !");
       exit(1);
    } else {
       # save the result #
@@ -292,18 +218,30 @@ sub setFileAcl {
       $fileMod = substr($fileMod, 1);
    }
 
+   # init mask #
+   $fileAcls{'lockedMask'} = '';
+   $fileAcls{'mask'}{'r'} = 0;
+   $fileAcls{'mask'}{'w'} = 0;
+   $fileAcls{'mask'}{'x'} = 0;
+
+   $defaultFileAcls{'lockedMask'} = '';
+   $defaultFileAcls{'mask'}{'r'} = 0;
+   $defaultFileAcls{'mask'}{'w'} = 0;
+   $defaultFileAcls{'mask'}{'x'} = 0;
+   
    # check mod user #
    my @modTargets = ('uperm', 'gperm', 'other');
-   foreach my $targetIdx (0..$#modTarget) {
+   foreach my $targetIdx (0..$#modTargets) {
  
       my $modTarget = $modTargets[$targetIdx];
 
       # read mod number #
-      my $mod = substr($fileMod, $targetIdx, 1);
+      my $mod = int(substr($fileMod, $targetIdx, 1));
       
       # r permission #
       if( $mod & 4 ) {
          $fileAcls{$modTarget}{'r'} = 1;
+         $fileAcls{'mask'}{'r'} = 1;
       } else {
          $fileAcls{$modTarget}{'r'} = 0;
       }
@@ -311,6 +249,7 @@ sub setFileAcl {
       # w permission #
       if( $mod & 2 ) {
          $fileAcls{$modTarget}{'w'} = 1;
+         $fileAcls{'mask'}{'w'} = 1;
       } else {
          $fileAcls{$modTarget}{'w'} = 0;
       }
@@ -318,6 +257,7 @@ sub setFileAcl {
       # x permission #
       if( $mod & 1 ) {
          $fileAcls{$modTarget}{'x'} = 1;
+         $fileAcls{'mask'}{'x'} = 1;
       } else {
          $fileAcls{$modTarget}{'x'} = 0;
       }
@@ -339,11 +279,18 @@ sub setFileAcl {
       }
 
       # read acl #
-      if( $fileAclString =~ m/^(u|user|g|group|m|mask|o|other):(.*?):([rwx]{0,3})(,|$)/ ) {
+      if( $fileAclString =~ m/^(u|user|g|group|m|mask|o|other):(.*?):?([rwx-]{0,3})(,|$)/ ) {
 
          my $aclType = $1;
          my $aclTarget = $2;
          my $aclRights = $3;
+
+         # get complete ACL string #
+         my $currentAlcString;
+         if( $fileAclString =~ m/^(.*?)(,|$)/ ) {
+            $currentAlcString = "$1$2";
+         }
+
          my $aclID;
 
          # check type #
@@ -360,6 +307,16 @@ sub setFileAcl {
             $aclType = "other";
          }
 
+         # particular cases, u::rwx or g::rwx #
+         if( $aclTarget =~ m/^ *$/ ) {
+            if( $aclType eq "user" ) {
+               $aclType = "uperm";
+            }
+            elsif( $aclType eq "group" ) {
+               $aclType = "gperm";
+            }
+         }
+        
          # get id if needed #
          if( $aclType eq "user" ) {
             $aclID = getUserUid($aclTarget);
@@ -371,47 +328,40 @@ sub setFileAcl {
          # save #
          if( $aclType eq "user" || $aclType eq "group" ) {
 
-            if( $aclRights =~ m/r/ ) {
-               $alcRef->{$aclType}{$aclID}{'r'} = 1;
-            } else {
-               $alcRef->{$aclType}{$aclID}{'r'} = 0;
+            foreach my $permType ('r', 'w', 'x') {
+               if( $aclRights =~ m/$permType/ ) {
+                  $alcRef->{$aclType}{$aclID}{$permType} = 1;
+                  if ( ! $alcRef->{'lockedMask'} ) {
+                     $alcRef->{'mask'}{$permType} = 1;
+                  }
+               } else {
+                  $alcRef->{$aclType}{$aclID}{$permType} = 0;
+               }
+            }
+         } 
+
+         else {
+
+            # if mask is set lock it #
+            if( $aclType eq "mask" ) {
+               $alcRef->{'lockedMask'} = 'true';
             }
 
-            if( $aclRights =~ m/w/ ) {
-               $alcRef->{$aclType}{$aclID}{'w'} = 1;
-            } else {
-               $alcRef->{$aclType}{$aclID}{'w'} = 0;
-            }
-
-            if( $aclRights =~ m/x/ ) {
-               $alcRef->{$aclType}{$aclID}{'x'} = 1;
-            } else {
-               $alcRef->{$aclType}{$aclID}{'x'} = 0;
-            }
-
-         } else {
-
-            if( $aclRights =~ m/r/ ) {
-               $alcRef->{$aclType}{'r'} = 1;
-            } else {
-               $alcRef->{$aclType}{'r'} = 0;
-            }
-
-            if( $aclRights =~ m/w/ ) {
-               $alcRef->{$aclType}{'w'} = 1;
-            } else {
-               $alcRef->{$aclType}{'w'} = 0;
-            }
-
-            if( $aclRights =~ m/x/ ) {
-               $alcRef->{$aclType}{'x'} = 1;
-            } else {
-               $alcRef->{$aclType}{'x'} = 0;
+            # set #
+            foreach my $permType ('r', 'w', 'x') {
+               if( $aclRights =~ m/$permType/ ) {
+                  $alcRef->{$aclType}{$permType} = 1;
+                  if ( ! $alcRef->{'lockedMask'} ) {
+                     $alcRef->{'mask'}{$permType} = 1;
+                  }
+               } else {
+                  $alcRef->{$aclType}{$permType} = 0;
+               }
             }
          }
 
-         # next #
-         $fileAclString = substr($fileAclString, length("$1:$2:$3$4"));
+         # next acl #
+         $fileAclString = substr($fileAclString, length($currentAlcString));
 
       } else {
          print("Bad ACL string : $fileAclString\n");
@@ -419,31 +369,73 @@ sub setFileAcl {
       }
    }
 
+   # copy base acls to default if needed #
+   # (the hash always contain mask and lockedMask) #
+   if( keys(%defaultFileAcls) > 2 ) {
+
+      # check all base perms #
+      foreach my $aclBasePerm ('uperm', 'gperm', 'other') {
+
+         # if the base perm is not defined, copy it #
+         if( ! defined( $defaultFileAcls{$aclBasePerm} )) {
+
+            # copy perm and update mask #
+            foreach my $permType ('r', 'w', 'x') {
+               $defaultFileAcls{$aclBasePerm}{$permType} = $fileAcls{$aclBasePerm}{$permType};
+               if( $defaultFileAcls{$aclBasePerm}{$permType} == 1 && ! $defaultFileAcls{'lockedMask'} ) {
+                  $defaultFileAcls{'mask'}{$permType} = 1;
+               }
+            }
+         }
+      }
+   }
+
+   # remove private keys #
+   delete($fileAcls{'lockedMask'});
+
+   # remove unused default mask #
+   if( keys(%defaultFileAcls) == 2 && ! $defaultFileAcls{'lockedMask'} ) {
+      delete($defaultFileAcls{'mask'});
+   }
+   delete($defaultFileAcls{'lockedMask'});
+
    # ok, acl read #
    # now apply #
-   setfacl($filePath, %fileAcls, %defaultFileAcls);
+   if( keys(%defaultFileAcls) ) {
+      setfacl($filePath, \%fileAcls, \%defaultFileAcls);
+   } else {
+      setfacl($filePath, \%fileAcls);
+   }
 }
 
 
-###############
-# ask library #
-###############
+my %groupsDisplayName;
 
-sub askYesOrNo {
+sub getGroupDisplayName {
 
-   # get params, the questions #
-   my $question = $_[0];
+   # one arg, the group DN #
+   my $groupDN = $_[0];
 
-   # ask #
-   while( 1 ) {
-      print("$question ([y]es or [N]o): ");
-      my $rep = <>;
-      if( $rep =~ m/^y(es|)$/ ) {
-         return 'yes';
-      elsif( $rep m=~ /^no?$/ ) {
-         return 'no';
-      }
+   # maybe already know it #
+   if( defined($groupsDisplayName{$groupDN}) ) {
+      return $groupsDisplayName{$groupDN};
    }
+
+   # if not, search #
+   open(my $searchGroupCall , "-|", "s4ldbsearch $groupDN base group '()' displayName");
+   my $shareClassGroupInfoLine = <$searchGroupCall>;
+   close($searchGroupCall);
+
+   if( $? != 0 ) {
+      print("Cannot find group $groupDN displayName !\n");
+      exit(1);
+   }
+
+   # save #
+   chomp($shareClassGroupInfoLine);
+   my $groupDisplayName = (split(/\t/, $shareClassGroupInfoLine))[1];
+   $groupsDisplayName{$groupDN} = $groupDisplayName;
+   return $groupDisplayName;
 }
 
 
@@ -455,11 +447,15 @@ sub askYesOrNo {
 my $optBaseClass;
 my $optForce;
 my $optDelete;
+my $optNoInteractive;
+my $optBackupDir;
 
 Getopt::Long::Configure("bundling","no_ignore_case");
-GetOptions("b|base-class" => \$optBaseClass,
+GetOptions("c|base-class=s" => \$optBaseClass,
            "f|force" => \$optForce,
-           "d|delete" => \$optDelete) 
+           "d|delete" => \$optDelete,
+           "n|no-interactive" => \$optNoInteractive,
+           "b|backup-dir=s" => \$optBackupDir) 
           or displayUsage();
 
 # check args #
@@ -467,23 +463,19 @@ if( @ARGV != 0 ){
    displayUsage();
 }
 
-
-# check the delete option #
-# can't be combined with base class as we touch each file #
-# to check unused #
-if ( defined($optBaseClass) && defined($optDelete) ) {
-   print("The -b and -d options can't be used together.\n");
-   exit(1);
-}
-
-
 # get the base class #
 my $baseClassName;
+my $rootClassName = substr($baseUserDN, length('OU='));
+my $baseClassIsRoot;
 
 if ( ! defined($optBaseClass) ) {
-   $baseClassName = substr($baseUserDN, length('OU='));
+   $baseClassName = $rootClassName;
 } else {
    $baseClassName = $optBaseClass;
+}
+
+if ( $baseClassName eq $rootClassName ) {
+   $baseClassIsRoot = 'true';
 }
 
 # check the class exist and get info #
@@ -513,6 +505,73 @@ if( $? != 0 ) {
    exit(1);
 }
 
+
+# check the delete option #
+# can't be combined with a no root base class as we need to touch all files #
+# to check unused #
+if ( ! $baseClassIsRoot && defined($optDelete) ) {
+   print("The -d options can only be used on root class $rootClassName.\n");
+   exit(1);
+}
+
+
+# check the backup dir #
+my $backupTimeString = localtime->strftime('%Y%m%d%H%M%S');
+if( defined($optBackupDir) ) {
+
+   # remove trailing slash #
+   $optBackupDir =~ s|/$||;
+
+   # check if exist #
+   if( ! -e $optBackupDir) {
+      print("Cannot find backup directory $optBackupDir !\n");
+      exit(0);
+   }
+
+   # check if directory #
+   if( ! -d $optBackupDir) {
+      print("Backup path $optBackupDir is not a directory !\n");
+      exit(0);
+   }
+
+   # check if writable #
+   if( ! -w $optBackupDir) {
+      print("Backup path $optBackupDir is not writable !\n");
+      exit(0);
+   }
+}
+
+
+###############
+# ask library #
+###############
+
+sub askYesOrNo {
+
+   # get params, the questions #
+   my $question = $_[0];
+
+   # if no interactive return yes #
+   if( defined($optNoInteractive) ) {
+      return 'yes';
+   }
+
+   # ask #
+   while( 1 ) {
+      print("$question ([y]es or [N]o): ");
+      my $rep = <>;
+      if( $rep =~ m/^y(es|)$/ ) {
+         return 'yes';
+      }
+      elsif( $rep =~ m/^no?$/ ) {
+         return 'no';
+      }
+   }
+}
+
+
+
+
 ###################
 # get system vars #
 ###################
@@ -523,21 +582,47 @@ my $serverHostname = hostname;
 # get time #
 my $baseTimestamp = time();
 
+# like mkdir -p but update all directories timestamps #
+sub createPathWithUpdatedTimestamp {
+
+   # get path #
+   my $completePath = $_[0];
+
+   # convert to absolute if needed #
+   if( ! ( $completePath =~ m|^/| ) ) { 
+      $completePath = Cwd::abs_path($completePath);
+   }
+
+   # traverse path #
+   my $currentPath = "";
+   foreach my $currentDir (File::Spec->splitdir($completePath)) {
+      $currentPath .= "/$currentDir";
+
+      if( "$currentPath" ne "/" ) {
+         if( -e "$currentPath" ) {
+            utime(undef, undef,$currentPath);
+         } else {
+            mkdir($currentPath);
+         }
+      }
+   } 
+}
+
+
 # To check unused dirs later #
 # -> create of update dir timestamp #
 # -> return if dir rights must be set #
 sub touchDir {
-   if ( -e $1 ) {
-      utime(undef, undef, $1);
-      if ( defined($optForce) ) {
-         return 1;
-      } else {
-         return 0;
-      }
-   } else {
-      make_path($1);
-      return 1;
+
+   my $filePath = $_[0];
+   my $rightMustBeUpdated = 1;
+   
+   if ( -e $filePath &&  ! defined($optForce) ) {
+      $rightMustBeUpdated = 0;
    }
+   
+   createPathWithUpdatedTimestamp($filePath);
+   return $rightMustBeUpdated;
 }
 
 
@@ -552,7 +637,7 @@ my %remoteHomeServers;
 my @oldHomeDirs;
 
 # get all users #
-open($ldbCall, "-|", "s4ldbsearch $baseClassUserDN,$baseDN sub user '()' cn unixHomeDirectory uidNumber gidNumber");
+open(my $ldbCall, "-|", "s4ldbsearch $baseClassUserDN,$baseDN sub user '()' cn unixHomeDirectory uidNumber gidNumber");
 
 while( my $userInfoLine = <$ldbCall> ) {
 
@@ -563,19 +648,19 @@ while( my $userInfoLine = <$ldbCall> ) {
 
    # get user class group #
    my $userClassGroup;
-   if( $userDn =~ m/^CN=$userCn,OU=(.*?),/ ) {
+   if( $userDn =~ m/^CN=$userName,OU=(.*?),/ ) {
       $userClassGroup = lc($1);
    } else {
-      print("Cannot determine user $userCn class group !\n");
+      print("Cannot determine user $userName class group !\n");
       exit(1);
    }
 
    # get user server #
    my $userServer;
-   if( $userHomeDirectory =~ m/\/dnfs\/$homeShare\/(.*)\/$userName ) {
+   if( $userHomeDirectory =~ m/\/dnfs\/$homeShare\/(.*)\/$userName$/ ) {
       $userServer = $1;
    } else {
-      print("Cannot determine user $userCn home server !\n");
+      print("Cannot determine user $userName home server !\n");
       exit(1);
    }
 
@@ -588,23 +673,24 @@ while( my $userInfoLine = <$ldbCall> ) {
    touchDir("$dfsPath/$userClassGroup");
 
    # if user on current server create user directory #
+   # and touch profile directories #
    if ( $userServer eq $serverHostname ) {
 
       #############################
       # check some specials cases #
       #############################
-      if ( -e $unixHomePath/$userName ) {
+      if ( -e "$unixHomePath/$userName" ) {
 
          # check if the uid is correct #
-         my ($currentDirUid, $currentDirGid) = (stat($unixHomePath/$userName))[4,5];
+         my ($currentDirUid, $currentDirGid) = (lstat("$unixHomePath/$userName"))[4,5];
 
          if ( $currentDirUid != $userUid) {
 
             # bad uid ! this must be an old user dir, delete or restore later #
-            push @oldHomeDirs, $unixHomePath/$userName;
-            chown($userUid, $userGid, $unixHomePath/$userName);
+            push @oldHomeDirs, "$unixHomePath/$userName";
+            chown($userUid, $userGid, "$unixHomePath/$userName");
             system("setfacl -bk $unixHomePath/$userName");
-            chmod(0700, $unixHomePath/$userName);
+            chmod(0700, "$unixHomePath/$userName");
 
          } else {
 
@@ -613,19 +699,26 @@ while( my $userInfoLine = <$ldbCall> ) {
 
                 # bad gid ! may the user's class have changed #
                 print("Seems the ${userName}'s class have changed, restoring rights ...\n");
-                chown($userUid, $userGid, $unixHomePath/$userName);
+                chown($userUid, $userGid, "$unixHomePath/$userName");
                 system("setfacl -bk $unixHomePath/$userName");
-                chmod(0700, $unixHomePath/$userName);
+                chmod(0700, "$unixHomePath/$userName");
             }
          }
       }      
 
       # touch the directory, and update rights if needed #
-      if( touchDir($unixHomePath/$userName) ) {
+      if( touchDir("$unixHomePath/$userName") ) {
 
-         chown($userUid, $userGid, $unixHomePath/$userName);
+         chown($userUid, $userGid, "$unixHomePath/$userName");
          system("setfacl -bk $unixHomePath/$userName");
-         chmod(0700, $unixHomePath/$userName);
+         chmod(0700, "$unixHomePath/$userName");
+      }
+
+      # touch profile directories if exist #
+      foreach my $profileDir (<$unixProfilePath/${userName}*>) {
+         if ( $profileDir =~ m{^$unixProfilePath/$userName(\.V\d|)$} ) {
+            utime(undef, undef, "$profileDir");
+         }
       }
    }
 
@@ -642,6 +735,9 @@ close($ldbCall);
 # get nfs params #
 ##################
 
+# template must not be deleted #
+utime(undef, undef, "/etc/exports.d/export.template");
+
 # get template #
 open(my $exportTemplate, "<", "/etc/exports.d/export.template") or die("Cannot find nfs export template !\n");
 my $shareNfsTemplate = <$exportTemplate>;
@@ -652,24 +748,29 @@ close($exportTemplate);
 my $shareNFSParams = (split(" ", $shareNfsTemplate))[1];
 
 
-##################################################################
-# create nfs home server redirection                             #
-# (not needed for dfs as the server is written in the home share # 
-##################################################################
-foreach my $remoteHomeServer (keys @remoteHomeServers) {
+###################################################################
+# create nfs home server redirection                              #
+# (not needed for dfs as the server is written in the home share) # 
+###################################################################
+foreach my $remoteHomeServer (keys %remoteHomeServers) {
 
    my $serverHomeShareDir="/srv/nfs4/$homeShare/$remoteHomeServer";
 
-   # create server redirection directory #
-   touchDir($serverHomeShareDir)
-   chown(0, $baseUserGroup, $serverHomeShareDir);
-   chmod(0755, $serverHomeShareDir);
+   # create/update server redirection directory #
+   if( touchDir($serverHomeShareDir) ) {
+      chown(0, getGroupGid($baseUserGroup), $serverHomeShareDir);
+      chmod(0755, $serverHomeShareDir);
+   }
 
    # create systemd unit to bind the directory to itself, needed for nfs referrals #
    my $systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount";
-   open(my $systemdUnit, ">", $systemdUnitName) or die "Can't open $systemdUnitName !";
 
-   print $systemdUnit 
+   # create only if not exist #
+   if( defined($optForce) || ! -e "/lib/systemd/system/$systemdUnitName" ) {
+
+      open(my $systemdUnit, ">", "/lib/systemd/system/$systemdUnitName") or die "Can't open $systemdUnitName !";
+
+      print $systemdUnit 
 "[Unit]
 
 [Mount]
@@ -682,23 +783,31 @@ Options=bind
 WantedBy=multi-user.target
 ";
 
-   close($systemdUnit);
+      close($systemdUnit);
 
-   system("systemctl enable $systemdUnitName");
-   system("systemctl start $systemdUnitName");
+      system("systemctl enable $systemdUnitName");
+      system("systemctl start $systemdUnitName");
+   } else {
+
+      # just update timestamp #
+      utime(undef, undef, "/lib/systemd/system/$systemdUnitName");
+   }
 
    ###########################
    # create nfs4 redirection #
    ###########################
 
    # add new referral params #
-   $shareNFSParamsWithReferral = substr($shareNFSParams, 0, -1) . ",refer=/$homeShare/$remoteHomeServer@$remoteHomeServer)");
+   my $shareNFSParamsWithReferral = substr($shareNFSParams, 0, -1) . ",refer=/$homeShare/$remoteHomeServer\@$remoteHomeServer)";
    
    # create new share #
-   open($nfsShareExport, ">", "/etc/exports.d/home-redirection-$remoteHomeServer.exports");
-   print $nfsShareExport "$serverHomeShareDir $shareNFSParamsWithReferral\n";
-   close($nfsShareExport);
-
+   if( defined($optForce) || ! -e "/etc/exports.d/home-redirection-$remoteHomeServer.exports" ) {
+      open(my $nfsShareExport, ">", "/etc/exports.d/home-redirection-$remoteHomeServer.exports");
+      print $nfsShareExport "$serverHomeShareDir $shareNFSParamsWithReferral\n";
+      close($nfsShareExport);
+   } else {
+      utime(undef, undef, "/etc/exports.d/home-redirection-$remoteHomeServer.exports");
+   }
 }
 
 
@@ -706,58 +815,55 @@ WantedBy=multi-user.target
 # create shares dirs #
 ######################
 
-# get all shares #
+# get all shares now #
+# to avoid recursive ldb calls #
+my @sharesInfo;
 open($ldbCall, "-|", "s4ldbsearch $baseClassShareDN,$baseDN sub user '()' cn givenName description unixHomeDirectory memberOf");
 
 while( my $shareInfoLine = <$ldbCall> ) {
 
    chomp($shareInfoLine);
 
+   my @shareInfo = split(/\t/, $shareInfoLine);
+   push @sharesInfo, \@shareInfo;
+}
+
+# create share #
+foreach my $shareInfo (@sharesInfo) {
+
    # get share info #
    # givenName -> show name
    # description -> rights : owner,mod,acls
    # unixHomeDirectory -> server 
    # memberOf -> the classes that see the share  
-   my ($shareDN, $shareName, $shareShowName, $shareRights, $shareServer, $shareShowClassesList) = split(/\t/, $shareInfoLine);
+   my ($shareDN, $shareName, $shareShowName, $shareRights, $shareServer, $shareShowClassesList) = (@$shareInfo);
 
    # get share class group and DN #
    my $shareClassName;
    my $shareClassGroup;
    my $shareClassGroupDN;
 
-   if( $shareDN =~ m/CN=$shareName,OU=(.*?),(.*),$baseShareDN,$baseDN$/ ) {
+   if( $shareDN =~ m/CN=$shareName,OU=(.*?),(.*)$baseShareDN,$baseDN$/ ) {
       $shareClassName = $1;
-      $userClassGroup = lc($shareClassName);
-      $shareClassGroupDN = "CN=$userClassGroup,OU=$shareClassName,$2,$baseUserDN,$baseDN";
+      $shareClassGroup = lc($shareClassName);
+      $shareClassGroupDN = "CN=$shareClassGroup,OU=$shareClassName,$2$baseUserDN,$baseDN";
    } else {
       print("Cannot determine the share $shareName class group !\n");
       exit(1);
    }
 
    # get share class display name #
-   my $shareClassDisplayName;
-
-   open(my $searchGroupCall , "-|", "s4ldbsearch $shareClassGroupDN base group '()' displayName");
-   my $shareClassGroupInfoLine = <$searchGroupCall>;
-   close($searchGroupCall);
-
-   if( $? != 0 ) {
-      print("Cannot find class $shareClassName group $shareClassGroupDN !\n");
-      exit(1);
-   }
-
-   chomp($shareClassGroupInfoLine);
-   my $shareClassDisplayName = (split(/\t/, <$searchGroupCall>))[1];
+   my $shareClassDisplayName = getGroupDisplayName($shareClassGroupDN);
 
    # get share show classes #
-   my @shareShowClasses = split(/|/, $shareShowClassesList);
+   my @shareShowClasses = split(/\|/, $shareShowClassesList);
 
 
    ##############
    # get rights #
    ##############
 
-   my ($shareOwner,$shareMod,$shareAcls) = split(/,/, $shareRights);
+   my ($shareOwner,$shareMod,$shareAcls) = split(/,/, $shareRights, 3);
    my ($shareOwnerUser, $shareOwnerGroup) = split(/:/, $shareOwner);
 
    my $shareOwnerUID;
@@ -789,13 +895,13 @@ while( my $shareInfoLine = <$ldbCall> ) {
    if( $shareServer eq $serverHostname ) {
 
       # check share directory #
-      if( touchDir($unixSharePath/$shareName) ) {
+      if( touchDir("$unixSharePath/$shareName") ) {
 
-         chown($shareOwnerUID, $shareOwnerGID, $unixSharePath/$shareName)
-         chmod($shareMod, $unixSharePath/$shareName);
+         chown($shareOwnerUID, $shareOwnerGID, "$unixSharePath/$shareName");
+         chmod(oct($shareMod), "$unixSharePath/$shareName");
          system("setfacl -bk $unixSharePath/$shareName");
          if( length($shareAcls) ) {
-            setFileAcl($unixSharePath/$shareName, $shareMod, $shareAcls);
+            setFileAcl("$unixSharePath/$shareName", $shareMod, $shareAcls);
          }
       }
    }
@@ -804,28 +910,46 @@ while( my $shareInfoLine = <$ldbCall> ) {
    ########################
    # create nfs/dfs links #
    ########################
-   open(my $shareExport, ">", "/etc/exports.d/$shareName.exports");
+   my $shareExport;
+   my $shareExportUpdate = '';
+   if( defined($optForce) || ! -e "/etc/exports.d/$shareName.exports" ) {
+      open($shareExport, ">", "/etc/exports.d/$shareName.exports");
+      $shareExportUpdate = 'true';
+   } else {
+      utime(undef, undef, "/etc/exports.d/$shareName.exports");
+   }
 
    my $nfsRoot = "/srv/nfs4/$shareShare";
    my $sambaDFSRoot = "$dfsPath";
 
-   foreach my $showClass (@shareShowClasses) {
+   foreach my $showClassDN (@shareShowClasses) {
 
-      my $showClassGroup = lc($showClass);
+      # get class name and group #
+      my $showClassName;
+      my $showClassGroup;
+
+      if( $showClassDN =~ m/CN=(.*?),/ ) {
+         $showClassName = $1;
+      } else {
+         print("Cannot get show class name from DN : $showClassDN !\n");
+         exit(1);
+      }
+      $showClassGroup = lc($showClassName);
 
       # make dirs #
       # the nfs one and samba dfs one # 
       my $shareShowDir = "$nfsRoot/$showClassGroup/$shareClassDisplayName/$shareShowName";
-      my $sambaShareShowDir = "$sambaDFSRoot/$showClassGroup/$shareClassDisplayName/$shareShowName";
+      my $sambaShareShowDir = "$sambaDFSRoot/$showClassGroup/$shareClassDisplayName";
 
       touchDir($shareShowDir);
       touchDir($sambaShareShowDir);
 
       # nfs share #
-      my $shareNfs = "$shareShowDir $shareNFSParams"
-      my $systemdUnitName = $shareShowDir;
+      my $shareNfs = "$shareShowDir $shareNFSParams";
+      my $systemdUnitName = substr($shareShowDir,1);
       $systemdUnitName =~ s|/|-|g;
-      
+      $systemdUnitName = "$systemdUnitName.mount";
+
       # add referral if needed #
       my $mountTarget;
       if( $shareServer eq $serverHostname ) {
@@ -837,8 +961,10 @@ while( my $shareInfoLine = <$ldbCall> ) {
       }
 
       # write unit file #
-      open(my $unitFile, ">", "/lib/systemd/system/$systemdUnitName");
-      print $unitFile
+      if( defined($optForce) || ! -e "/lib/systemd/system/$systemdUnitName" ) {
+
+         open(my $unitFile, ">", "/lib/systemd/system/$systemdUnitName");
+         print $unitFile
 "[Unit]
 
 [Mount]
@@ -850,47 +976,286 @@ Options=bind
 [Install]
 WantedBy=multi-user.target
 ";
-      close($unitFile);
+         close($unitFile);
 
-      system("systemctl enable $systemdUnitName");
-      system("systemctl start $systemdUnitName");
+         system("systemctl enable $systemdUnitName");
+         system("systemctl start $systemdUnitName");
+      } else {
+         utime(undef, undef, "/lib/systemd/system/$systemdUnitName");
+      }
    
       # add show export #
-      print $shareExport "$shareNfs\n";
+      if ( $shareExportUpdate ) {
+         print $shareExport "$shareNfs\n";
+      }
 
       # dfs share #
-      symlink("msdfs:$shareServer\\$shareShare\\$shareName", $sambaShareShowDir); 
+      # the only way to update a link is to create it again #
+      if( -l "$sambaShareShowDir/$shareShowName" ) {
+         unlink("$sambaShareShowDir/$shareShowName");
+      }
+      symlink("msdfs:$shareServer\\$shareShare\\$shareName", "$sambaShareShowDir/$shareShowName");
    }
 
-  close($shareExport);
+   if( $shareExportUpdate ) {
+      close($shareExport);
+   }
   
 }
 close($ldbCall);
 
-# reload nfs #
-system("/usr/sbin/exportfs -ra");
+#############################################################
+
+#########
+# clean #
+#########
+
+#################
+# clean methods #
+#################
+my $cleanMaxDepth = 0;
+my $cleanFilesRef;
 
 
-###################
-# clean if needed #
-###################
+sub cleanTree {
+
+   # get params, the tree path and the depth #
+   my ($cleanPath, $cleanDepth) = (@_);
+
+   # init global vars #
+   $cleanMaxDepth = $cleanDepth;
+   my @cleanFiles = ();
+   $cleanFilesRef = \@cleanFiles; 
+
+   # find file to clean #
+   find( { wanted => \&checkFileTimestamp, preprocess => \&cleanPreprocess, bydepth => 1, follow => 0 }, $cleanPath);
+
+   # delete them #
+   foreach my $filePath (@cleanFiles) {
+      print("Deleting $filePath\n");
+      if( -d "$filePath" ) {
+         rmdir($filePath);
+      } else {
+         unlink($filePath);
+      }
+   }
+}
+
+# used to limit depth #
+sub cleanPreprocess {
+
+   # scalar(File::Spec->splitdir) return depth + 1 but preprocess determiner if the next depth (depth + 1) must be proceded #
+   if( scalar(File::Spec->splitdir($File::Find::dir)) <= $cleanMaxDepth ) {
+      return @_
+   }
+
+   return;
+}
+
+# check file that need to be deleted #
+sub checkFileTimestamp {
+
+   if( (lstat($File::Find::name))[9] < $baseTimestamp ) {
+      push @$cleanFilesRef, $File::Find::name;
+   }
+}
+
+
+# clean only if executed on root class #
+# as timestamps are used to determine  #
+# unused files/dirs                    #
+if( $baseClassIsRoot ) {
+
+   #######################
+   # clean systemd units #
+   #######################
+
+   # check all systemd unit files relative to nfs #
+   foreach my $systemdUnitFile (</lib/systemd/system/srv-nfs4-*>) {
+
+      # check timestamp #
+      if ( (lstat($systemdUnitFile))[9] < $baseTimestamp ) {
+
+         # delete unit #
+         print("Deleting systemd unit $systemdUnitFile\n");
+
+         my $systemdUnitName = basename($systemdUnitFile);
+         system("systemctl stop $systemdUnitName");
+         system("systemctl disable $systemdUnitName");
+         unlink($systemdUnitFile); 
+      }
+   }
+
+
+   ##########################
+   # clean nfs export files #
+   ##########################
+   foreach my $nfsExportFile (</etc/exports.d/*>) {
+
+      # check timestamp #
+      if ( (lstat($nfsExportFile))[9] < $baseTimestamp ) {
+
+         # delete export #
+         print("Deleting nfs export $nfsExportFile\n");
+         unlink($nfsExportFile);
+      }
+   }
+
+
+   #################################
+   # reload nfs                    #
+   # as we will delete directories #
+   #################################
+   system("/usr/sbin/exportfs -ra");
+
+
+   ######################################
+   # clean nfs home server redirections #
+   ######################################
+   foreach my $nfsHomeServerRedirectionDir (</srv/nfs4/$homeShare/*>) {
+
+      # check if remote #
+      my $remoteServerName = basename($nfsHomeServerRedirectionDir);
+      if( $serverHostname ne $remoteServerName ) {
+
+         # check timestamp #
+         if ( (lstat($nfsHomeServerRedirectionDir))[9] < $baseTimestamp ) {
+
+            # delete dir #
+            print("Deleting home redirection dir $nfsHomeServerRedirectionDir\n");
+            rmdir($nfsHomeServerRedirectionDir);
+         }
+      }
+   }
+
+
+   ##################
+   # clean nfs tree #
+   ##################
+
+   # the current depth
+   my $cleanDepth = scalar(File::Spec->splitdir("/srv/nfs4/$shareShare")) - 1;
+
+   # add 3
+   $cleanDepth += 3;
+
+   # clean
+   cleanTree("/srv/nfs4/$shareShare", $cleanDepth);
+
+   ##################
+   # clean dfs tree #
+   ##################
+
+   # the current depth
+   $cleanDepth = scalar(File::Spec->splitdir("$dfsPath")) - 1;
+
+   # add 3
+   $cleanDepth += 3;
+
+   # clean
+   cleanTree("$dfsPath", $cleanDepth);
+
+} else {
+
+   #################################
+   # no clean, just reload nfs     #
+   #################################
+   system("/usr/sbin/exportfs -ra");
+}
+
+
+####################################################
+
+sub isDirEmpty {
+
+   my $dirPath = $_[0];
+   my $dirIsEmpty = '1';
+
+   opendir(my $dirHdl, $dirPath) or die("Cannot open directory $dirPath !\n");
+   while( readdir($dirHdl) ) {
+      if( $_ ne '.' && $_ ne '..' ) {
+         $dirIsEmpty = 0;
+         last;
+      }
+   }
+   closedir($dirHdl);
+
+   return $dirIsEmpty;
+} 
+
+sub backupAndDeleteDir {
+
+   my ($deletePath, $deleteType) = (@_);
+
+   # backup if needed #
+   my $backupSuccess = '';
+   if( defined($optBackupDir) ) {
+      my $backupCurrentDir = dirname($deletePath);
+      my $backupDirName = basename($deletePath);
+
+      if( ! isDirEmpty($deletePath) ) {
+         print("Backing up $deletePath ...\n");
+         system("tar -C '$backupCurrentDir' --acls --xattrs -czpf '$optBackupDir/$backupTimeString.$backupDirName.$deleteType.tar.gz' '$backupDirName'");
+
+         if( $? == 0 ) {
+            $backupSuccess = 'true';
+         }
+      } else {
+         # no need to backup #
+         $backupSuccess = 'true';
+      }
+   }
+
+   # delete, check success #
+   if( ! defined($optBackupDir) || $backupSuccess ) {
+      print("Deleting $deletePath ...\n");
+      rmtree($deletePath, { safe => 1 });
+   } else {
+      if( defined($optBackupDir) && ! $backupSuccess ) {
+         print("Failed to backup $deletePath, so it will no be deleted !\n");
+      }
+   }
+}
+
+
+#########################
+# clean data dirs       #
+# date may need backups #
+#########################
 
 # old user dirs #
 foreach my $oldHomeDir (@oldHomeDirs) {
 
    my $changedUserName = basename($oldHomeDir);
-   my ($changedUserUid, $changedUserGid) = (stat($oldHomeDir))[4,5];
+   my ($changedUserUid, $changedUserGid) = (lstat($oldHomeDir))[4,5];
    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
    print("$oldHomeDir seems to be an old home dir.\n");
    print("But a new user with the same name now exist.\n");
-   if( askYesOrNo("Would you like to delete the old files ? if not they will be given to the new user.") eq "yes" ) {
-      rmtree($oldHomeDir, { safe => 1 });
-      touchDir($oldHomeDir);
-      chown($changedUserUid, $changedUserGid, $oldHomeDir);
-      chmod(0700, $oldHomeDir);
+
+   # check action #
+   my $cleanAction;
+   if( defined($optBackupDir) ) {
+      $cleanAction = 'backup and delete';
    } else {
+      $cleanAction = 'permanently delete';
+   }
+
+   # check if we need to delete #
+   # -> if no interactive with backp dir
+   # -> or if interactive with a yes reply
+   if( (defined($optNoInteractive) && defined($optBackupDir)) ||
+       ( ! defined($optNoInteractive) &&
+        askYesOrNo("Would you like to $cleanAction the old files ? if not they will be given to the new user.") eq "yes" ) ) {
+
+      # backup and delete #
+      backupAndDeleteDir($oldHomeDir, 'home');
+   } 
+
+   # else give the drectory to the new user #
+   else {
 
       # recursive chown #
+      print("Updating $oldHomeDir rights ...\n");
       chown($changedUserUid, $changedUserGid, $oldHomeDir);
       chmod(0700,$oldHomeDir);
       system("setfacl -R -bk $oldHomeDir");
@@ -905,70 +1270,59 @@ foreach my $oldHomeDir (@oldHomeDirs) {
 
 
 # the others dirs #
-if( $optDelete ) {
+if( defined($optDelete) ) {
 
-   # clean homes dirs #
-   my @badHomeDirs;
+   # clean home, share, and profile dirs #
+   my %cleanPaths = ('home' => "$unixHomePath", 'share' => "$unixSharePath", 'profile' => "$unixProfilePath");
+
+   foreach my $pathType (keys %cleanPaths) {
+
+      my $cleanPath = $cleanPaths{$pathType};
+
+      # get old dirs #
+      my @badDirs;
    
-   # check all homes #
-   foreach my $homePath (<$unixHomePath/*>) {
+      # check all dirs #
+      foreach my $dirPath (<$cleanPath/*>) {
 
-      # check if the directory is older #
-      if ( (stat($homePath))[9] < $baseTimestamp ) {
-         push @badHomeDirs, $homePath;
-      }
-   }
-
-   if( @badHomeDirs ) {
-
-      print("\n");
-      print("###############################################\n");
-      print(" The following home directories seems not used \n");
-      print("###############################################\n");
-
-      foreach my $badHomeDir (@badHomeDirs) {
-         print("$badHomeDir\n");
+         # check if the directory is older #
+         if ( (lstat($dirPath))[9] < $baseTimestamp ) {
+            push @badDirs, $dirPath;
+         }
       }
 
-      if( askYesOrNo("Would you like to delete them ?") eq "yes") {
-         foreach my $badHomeDir (@badHomeDirs) {
-            rmtree($badHomeDir, { safe => 1 });
+      if( @badDirs ) {
+
+         print("\n");
+         print("###############################################\n");
+         print(" The following $pathType directories seems not used \n");
+         print("###############################################\n");
+
+         foreach my $badDir (@badDirs) {
+            print("$badDir\n");
+         }
+
+         # check action #
+         my $cleanAction;
+         if( defined($optBackupDir) ) {
+            $cleanAction = 'backup and delete';
+         } else {
+            $cleanAction = 'permanently delete';
+         }
+
+         # check if we need to delete #
+         # -> if no interactive with backp dir
+         # -> or if interactive with a yes reply
+         if( (defined($optNoInteractive) && defined($optBackupDir)) ||
+             ( ! defined($optNoInteractive) &&
+             askYesOrNo("Would you like to $cleanAction them ?") eq "yes" ) ) {
+
+            foreach my $badDir (@badDirs) {
+
+               # backup and delete #
+               backupAndDeleteDir($badDir, $pathType);
+            }
          }
       }
    }
-
-   # clean share dirs #
-   my @badShareDirs;
-
-   # check all shares #
-   foreach my $sharePath (<$unixSharePath/*>) {
-
-      # check if the directory is older #
-      if ( (stat($sharePath))[9] < $baseTimestamp ) {
-         push @badShareDirs, $sharePath;
-      }
-   }
-
-   if( @badShareDirs ) {
-
-      print("\n");
-      print("################################################\n");
-      print(" The following share directories seems not used \n");
-      print("################################################\n");
-
-      foreach my $badShareDir (@badShareDirs) {
-         print("$badShareDir\n");
-      }
-
-      if( askYesOrNo("Would you like to delete them ?") eq "yes") {
-         foreach my $badShareDir (@badShareDirs) {
-            rmtree($badShareDir, { safe => 1 });
-         }
-      }
-   }
-
-   # clean profiles dirs #
-   #!!!!!!!!!!!!!!!!!!!!#
-
 }
-

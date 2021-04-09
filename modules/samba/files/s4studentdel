@@ -64,13 +64,10 @@ fi
 # parse username #
 studentName=$1
 
-# check if the student account exist #
-# already done in s4userdel #
-
 # check if the account is a student #
 if ! s4ldbsearch $baseStudentDN,$baseDN sub user "(cn=$studentName)" > /dev/null; then
    echo "The user $studentName is not a student !"
-   exit 0
+   exit 1
 fi
 
 ###################

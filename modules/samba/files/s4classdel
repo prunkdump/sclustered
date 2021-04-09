@@ -100,6 +100,7 @@ echo "Computing what need to be deleted ..."
 
 
 # get the children OUs #
+# remove the OU itself of the search #
 childrenOUDNs=$(s4ldbsearch $classDN,$baseDN sub ou '()' | sed "/^$classDN/d")
 
 # check the OU that are classes #
@@ -226,3 +227,10 @@ echo "Deleting the class !"
 samba-tool ou delete --force-subtree-delete $classDN
 samba-tool ou delete --force-subtree-delete $classShareDN
 echo "Class $className deleted !"
+
+if [ ! -z "$childrenUserDNs" ] || [ ! -z "$childrenShareDNs" ]; then
+   echo "##################################################"
+   echo "# !!! Launch s4makeshareddirs on the servers !!! #"
+   echo "# !!! to update the network shares.          !!! #"
+   echo "##################################################"
+fi

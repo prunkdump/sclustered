@@ -99,12 +99,14 @@ if [ ! -z "$classShowName" ]; then
    if [ -z "$searchCond" ]; then
       searchCond="(displayName=$classShowName)"
    else
-      searchCond="(&${searchCond}(displayName=$classShowName)"
+      searchCond="(&${searchCond}(displayName=$classShowName))"
    fi
 fi
 
 # check search cond #
 if [ -z "$searchCond" ]; then
+
+   # no condition given #
    usage
 fi
 
@@ -117,6 +119,7 @@ else
    resultCount=$(echo "$searchClass" | wc -l)
    if [ "$resultCount" -ne "1" ]; then
       echo "Multiple classes found !"
+      exit 1
    fi
 fi
 
@@ -125,7 +128,6 @@ if [ -z "$className" ]; then
 
    # read the class name  #
    # the OU containing the group #
-   # (no need to remove the dn: part as we use -f2 ) #
    className=$(echo "$searchClass" | cut -d, -f2)
    className=${className#OU=}
    classGroup=${className,,}
@@ -144,7 +146,7 @@ classShareDN="${classShareDN}$baseShareDN"
 
 searchClass=$(s4ldbsearch $classShareDN,$baseDN base ou '()')
 if [ "$?" -ne "0" ]; then
-   echo "Cannot found the share OU of the class $className ! Maybe not a class group."
+   echo "Cannot find the share OU of the class $className ! Maybe not a class group."
    exit 1
 fi
 
@@ -154,5 +156,3 @@ echo "Class DN: $classDN"
 echo "Class share DN: $classShareDN"
 
 exit 0
-
-

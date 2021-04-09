@@ -76,7 +76,7 @@ if classInfo=$(s4classcheck -g $groupName); then
    echo "The group $groupName belong to the class $className !"
    echo "To delete the group, you need to delete the class with :"
    echo "s4classdel $className"
-   exit 0
+   exit 1
 fi
 
 

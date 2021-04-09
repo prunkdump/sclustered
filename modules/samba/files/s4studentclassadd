@@ -42,6 +42,11 @@ studentsGroupName=${studentsClassName,,}
 # create the class #
 s4classadd $newStudentClassName -b $studentsClassName
 
+# if already exist, stop #
+if [ "$?" -ne "0" ]; then
+   exit 1
+fi
+
 #####################
 # create the shares #
 #####################

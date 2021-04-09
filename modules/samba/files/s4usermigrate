@@ -77,8 +77,8 @@ fi
 #####################
 # check user server #
 #####################
-userDN=$(echo "$userSearch" | -f1)
-sourceServer=$(echo "$userSearch" | -f2)
+userDN=$(echo "$userSearch" | cut -f1)
+sourceServer=$(echo "$userSearch" | cut -f2)
 sourceServer=${sourceServer#/dnfs/$homeShare/}
 sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
 
@@ -166,7 +166,7 @@ else
    ssh $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
 fi
 
-# rsync home #
+# rsync home if exist #
 if [ "$?" -eq "0" ]; then
 
    # build source #

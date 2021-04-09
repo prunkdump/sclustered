@@ -73,15 +73,15 @@ newStudentOptions=""
 # check if the class exist #
 if ! newStudentClassInfo=$(s4classcheck $newStudentClass); then
    echo "The student class $newStudentClass cannot be found !"
-   exit 0
+   exit 1
 fi
 
 # check if the class is a student class #
 newStudentClassDN=$(echo "$newStudentClassInfo" | grep 'Class DN: ')
 newStudentClassDN=${newStudentClassDN#Class DN: }
 if ! echo "$newStudentClassDN" | grep -q "$baseStudentDN\$"; then
-   echo "The student class $newStudentClass cannot be found !"
-   exit 0
+   echo "A class $newStudentClass is found but this is not a student class !"
+   exit 1
 fi
 
 # parse options #
