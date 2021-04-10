@@ -71,11 +71,51 @@ class debbug::client {
       subscribe => File['/lib/systemd/system/suspend-bugs.service'],
    }
 
+   # bug Gssd make looping dns request when the credential cache expire #
+   # so check the users logged on wake #
+   file { '/lib/systemd/system/gssd-bug.service':
+      ensure => present,
+      source => 'puppet:///modules/debbug/gssd-bug.service',
+      mode => '0644',
+   }
+
+   file { '/sbin/check-gssd-cache':
+      ensure => present,
+      source => 'puppet:///modules/debbug/check-gssd-cache',
+      mode => '0755',
+   }
+
+   exec { 'gssd-service-daemon-reload':
+      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      command => 'systemctl daemon-reload && /sbin/check-gssd-cache',
+      refreshonly => true,
+      subscribe => File['/lib/systemd/system/gssd-bug.service','/sbin/check-gssd-cache'],
+   }
+
+   service { 'gssd-bug':
+      enable => true,
+      require => [File['/lib/systemd/system/gssd-bug.service','/sbin/check-gssd-cache'],
+                  Exec['gssd-service-daemon-reload']],
+   }
+
    # nullmailer can fill disk with certain cron scripts #
    service { 'nullmailer':
       ensure => stopped,
       enable => false,
    }
 
+   # grub failed to upgrade #
+   file { '/usr/sbin/debbug-grub-repair':
+      ensure => present,
+      source => 'puppet:///modules/debbug/debbug-grub-repair',
+      mode => '0755',
+   }
+
+   exec { 'check-grub-device':
+      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      command => '/usr/sbin/debbug-grub-repair',
+      unless => "echo 'get grub-pc/install_devices' | debconf-communicate | grep -q '/dev'",
+      require => File['/usr/sbin/debbug-grub-repair'],
+   }
 
 }

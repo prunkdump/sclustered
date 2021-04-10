@@ -1,0 +1,13 @@
+[Unit]
+Description=Gssd credential cache hook
+Before=sleep.target
+StopWhenUnneeded=yes
+
+[Service]
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Type=oneshot
+RemainAfterExit=yes
+ExecStop=-check-gssd-cache
+
+[Install]
+WantedBy=sleep.target

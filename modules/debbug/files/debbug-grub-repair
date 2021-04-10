@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# get what is mounted on / #
+while read -r mountInfo; do
+
+  mountDevice=$(echo "$mountInfo" | tr -s ' ' | cut -d ' ' -f1)
+  mountTarget=$(echo "$mountInfo" | tr -s ' ' | cut -d ' ' -f6)
+
+  if [ "$mountTarget" == '/' ]; then
+     rootPartDevice="$mountDevice"
+     break
+  fi
+done < <(df)
+
+# check if found #
+if [ -z "$rootPartDevice" ]; then
+   exit 0
+fi
+
+# get disk device #
+rootDiskDevice=$(lsblk -no pkname "$rootPartDevice")
+rootDiskDevice="/dev/$rootDiskDevice"
+
+# check if found #
+if [ "$?" -ne "0" ] || [ ! -e "$rootDiskDevice" ]; then
+   exit 0
+fi
+
+# get the disk id #
+diskID=''
+
+for diskLink in /dev/disk/by-id/*; do
+   diskDevicePath=$(readlink -f $diskLink)
+   if [ "$diskDevicePath" == "$rootDiskDevice" ]; then
+      diskID="$diskLink"
+      break
+   fi
+done
+
+if [ -z "$diskID" ]; then
+   exit 0
+fi
+
+echo "set grub-pc/install_devices $diskID" | debconf-communicate
+dpkg --configure grub-pc

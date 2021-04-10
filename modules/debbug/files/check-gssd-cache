@@ -1,0 +1,41 @@
+#! /bin/bash
+
+# max idmap tries #
+maxTry="15"
+
+##########################
+# check all users logged #
+##########################
+while read -r loggedUserInfo; do
+
+   # get user name #
+   userName=$(echo "$loggedUserInfo" | cut -d' ' -f1)
+   if [ -z "$userName" ]; then
+      continue
+   fi
+
+   # get user id #
+   numTry="0"
+   while ! userID=$(id -u "$userName"); do
+      sleep 1
+      numTry=$((numTry+1))
+      if [ "$numTry" -gt "$maxTry" ]; then
+         break
+      fi
+   done
+
+   if [ "$numTry" -gt "$maxTry" ]; then
+      continue
+   fi
+
+   # continue only if not root #
+   if [ "$userID" -ne "0" ]; then
+
+      # check credential cache file #
+      userCredCacheFile="/tmp/krb5cc_$userID";
+      if [ ! -e "$userCredCacheFile" ] || ! klist -s "$userCredCacheFile"; then
+         killall -u "$userName"
+         continue
+      fi
+   fi
+done < <(who)
