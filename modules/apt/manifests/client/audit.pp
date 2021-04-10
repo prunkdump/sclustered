@@ -12,7 +12,8 @@ class apt::client::audit {
    # audit apt status #
    exec { 'apt_configure_partially':
       path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-      command => 'apt-get update && apt-get clean && ( dpkg --configure -a || apt-get -f -y install || apt --fix-broken install )',
+      environment => ['DEBIAN_FRONTEND=noninteractive'],
+      command => 'apt-get update && apt-get clean && ( dpkg --configure -a || apt-get -f -y install || apt --fix-broken install || true)',
       onlyif => 'dpkg --audit | grep -q .',
       require => File['01conffiles'],
    }
