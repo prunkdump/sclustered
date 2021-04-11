@@ -970,7 +970,7 @@ foreach my $shareInfo (@sharesInfo) {
       } else {
          # bind mount to itself #
          $mountTarget = $shareShowDir;
-         $shareNfs = substr($shareNfs, 0, -1) . ",refer=/$shareShare/$showClassGroup/$shareClassDisplayName/$shareShowName@$shareServer)"; 
+         $shareNfs = substr($shareNfs, 0, -1) . ",refer=/$shareShare/$showClassGroup/$shareClassDisplayName/$shareShowName\@$shareServer)";
       }
 
       # write unit file #
