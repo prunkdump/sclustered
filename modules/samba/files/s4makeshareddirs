@@ -1,10 +1,11 @@
-#! /usr/bin/perl -w
+#! /usr/bin/perl -w -CD
 use strict;
 use warnings;
 use utf8;
 use File::Basename;
 use File::Path qw(make_path rmtree);
 use File::Find;
+use Encode qw(decode);
 use Getopt::Long;
 use Sys::Hostname;
 use Linux::ACL;
@@ -735,6 +736,20 @@ close($ldbCall);
 # get nfs params #
 ##################
 
+sub getSystemdUnitName {
+
+   my $path = $_[0];
+
+   # read unit name #
+   open(my $systemdEscape, "-|", "systemd-escape -p --suffix=mount '$path'") or die("Cannot launch systemd-escape !\n");
+   my $unitName = <$systemdEscape>;
+   chomp($unitName);
+   close($systemdEscape);
+
+   return $unitName;
+} 
+
+
 # template must not be deleted #
 utime(undef, undef, "/etc/exports.d/export.template");
 
@@ -763,7 +778,7 @@ foreach my $remoteHomeServer (keys %remoteHomeServers) {
    }
 
    # create systemd unit to bind the directory to itself, needed for nfs referrals #
-   my $systemdUnitName="srv-nfs4-$homeShare-$remoteHomeServer.mount";
+   my $systemdUnitName = getSystemdUnitName("/srv/nfs4/$homeShare/$remoteHomeServer");
 
    # create only if not exist #
    if( defined($optForce) || ! -e "/lib/systemd/system/$systemdUnitName" ) {
@@ -785,8 +800,8 @@ WantedBy=multi-user.target
 
       close($systemdUnit);
 
-      system("systemctl enable $systemdUnitName");
-      system("systemctl start $systemdUnitName");
+      system("systemctl enable '$systemdUnitName'");
+      system("systemctl start '$systemdUnitName'");
    } else {
 
       # just update timestamp #
@@ -946,9 +961,7 @@ foreach my $shareInfo (@sharesInfo) {
 
       # nfs share #
       my $shareNfs = "$shareShowDir $shareNFSParams";
-      my $systemdUnitName = substr($shareShowDir,1);
-      $systemdUnitName =~ s|/|-|g;
-      $systemdUnitName = "$systemdUnitName.mount";
+      my $systemdUnitName = getSystemdUnitName($shareShowDir);
 
       # add referral if needed #
       my $mountTarget;
@@ -978,8 +991,8 @@ WantedBy=multi-user.target
 ";
          close($unitFile);
 
-         system("systemctl enable $systemdUnitName");
-         system("systemctl start $systemdUnitName");
+         system("systemctl enable '$systemdUnitName'");
+         system("systemctl start '$systemdUnitName'");
       } else {
          utime(undef, undef, "/lib/systemd/system/$systemdUnitName");
       }
@@ -1044,6 +1057,8 @@ sub cleanTree {
 # used to limit depth #
 sub cleanPreprocess {
 
+   my $filePath = decode("UTF-8", $File::Find::dir);
+
    # scalar(File::Spec->splitdir) return depth + 1 but preprocess determiner if the next depth (depth + 1) must be proceded #
    if( scalar(File::Spec->splitdir($File::Find::dir)) <= $cleanMaxDepth ) {
       return @_
@@ -1054,9 +1069,11 @@ sub cleanPreprocess {
 
 # check file that need to be deleted #
 sub checkFileTimestamp {
+  
+   my $filePath = decode("UTF-8", $File::Find::name);
 
-   if( (lstat($File::Find::name))[9] < $baseTimestamp ) {
-      push @$cleanFilesRef, $File::Find::name;
+   if( (lstat($filePath))[9] < $baseTimestamp ) {
+      push @$cleanFilesRef, $filePath;
    }
 }
 
@@ -1080,8 +1097,8 @@ if( $baseClassIsRoot ) {
          print("Deleting systemd unit $systemdUnitFile\n");
 
          my $systemdUnitName = basename($systemdUnitFile);
-         system("systemctl stop $systemdUnitName");
-         system("systemctl disable $systemdUnitName");
+         system("systemctl stop '$systemdUnitName'");
+         system("systemctl disable '$systemdUnitName'");
          unlink($systemdUnitFile); 
       }
    }

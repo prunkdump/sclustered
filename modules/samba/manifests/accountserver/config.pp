@@ -72,7 +72,7 @@ class samba::accountserver::config (
    ############
 
    # for perl scripts #
-   package { ['libstring-random-perl','libxml-libxml-simple-perl','libtext-unidecode-perl']:
+   package { ['libstring-random-perl','libxml-libxml-simple-perl','libtext-unidecode-perl','liblinux-acl-perl']:
       ensure => installed,
    }
 
