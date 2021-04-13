@@ -1,4 +1,4 @@
-#! /usr/bin/perl -w -CD
+#! /usr/bin/perl -w
 use strict;
 use warnings;
 use Text::Unidecode;
@@ -8,8 +8,6 @@ use File::Basename;
 use Getopt::Long;
 use String::Random;
 use experimental 'smartmatch';
-
-# !!! studentclassdel disabled !!! #
 
 # output as utf8 #
 binmode(STDOUT,':encoding(UTF-8)');
@@ -77,6 +75,32 @@ if( ! -e $ARGV[0] ) {
 }    
 
 
+# ask question if no interactive #
+sub askYesOrNo {
+
+   # get params, the questions #
+   my $question = $_[0];
+
+   # if no interactive return yes #
+   if( defined($optNoInteractive) ) {
+      return 'yes';
+   }
+
+   # ask #
+   while( 1 ) {
+
+      print("$question ([y]es or [N]o): ");
+      my $rep = <STDIN>;
+      if( $rep =~ m/^y(es|)$/ ) {
+         return 'yes';
+      }
+      elsif( $rep =~ m/^no?$/ ) {
+         return 'no';
+      }
+   }
+}
+
+
 ######################
 # check samba config #
 ######################
@@ -86,6 +110,7 @@ my $s4ConfFile = "/etc/samba/s4.conf";
 my $samDatabase;
 my $studentBaseDN;
 my $baseDN;
+my $baseUserDN;
 my $baseStudentDN;
 my $loginSurnameChar;
 my $loginGivennameChar;
@@ -94,9 +119,10 @@ my $baseStudentDir;
 my $teachersDirName;
 
 # open main configuration file #
-open(SCONF, "< $s4ConfFile") or die("Cannot read $s4ConfFile");
-while( defined( my $line = <SCONF> ) ) {
-   chomp $line;
+open(my $sambaConf, "<:encoding(UTF-8)", "$s4ConfFile") or die("Cannot read $s4ConfFile");
+while( my $line = <$sambaConf> ) {
+
+   chomp($line);
    
    # remove comments #
    if( $line =~ m/\#/ ) {
@@ -113,6 +139,9 @@ while( defined( my $line = <SCONF> ) ) {
    # student base dn #
    if ( $line =~ /baseDN *= *\"(.*?)\"/ ) {
       $baseDN = $1;
+   }
+   if( $line =~ /baseUserDN *= *\"(.*?)\"/ ) {
+      $baseUserDN = $1;
    }
    if ( $line =~ /baseStudentDN *= *\"(.*?)\"/ ) {
       $baseStudentDN = $1;
@@ -144,7 +173,7 @@ while( defined( my $line = <SCONF> ) ) {
    }
 
 }
-close(SCONF);
+close($sambaConf);
 
 
 # check global vars #
@@ -154,7 +183,7 @@ if( ! (defined($samDatabase) &&
        defined($loginSurnameChar) &&
        defined($loginGivennameChar) ) ) {
    print("Cannot read global variables on $s4ConfFile\n");
-   exit(0); 
+   exit(1); 
 } else {
    $studentBaseDN = "$baseStudentDN,$baseDN";
 }
@@ -167,49 +196,53 @@ if( ! (defined($samDatabase) &&
 # check if the user want to update student's data #
 my $checkStudentData;
 
-if( $optUpdateData ) { 
+if( defined($optUpdateData) ) { 
    $checkStudentData = 1;
-} elsif( ! $optNoInteractive ) {
-   # ask question
-   my $userWantData = " "; 
-   while( $userWantData ne "yes" && $userWantData ne "no") {
-      print "Would you like to update student's data ? (yes/no) ";
-      $userWantData = <STDIN>;
-      chomp($userWantData);
-   }
-
-   # check the reply #
-   if( $userWantData eq "yes" ) {
+} else {
+   if( askYesOrNo("Would you like to update student's data ?") eq "yes" ) {
       $checkStudentData = 1;
    }
 }
 
-
 # check if the user want to delete the students #
 my $deleteStudents;
 
-if( $optDeleteStudents ) {
+if( defined($optDeleteStudents) ) {
    $deleteStudents = 1;
-} elsif( ! $optNoInteractive ) {
-   # ask question
-   my $userWantDelete = " ";
-   while( $userWantDelete ne "yes" && $userWantDelete ne "no") {
-      print "Would you like to delete the old student's accounts ? (yes/no) ";
-      $userWantDelete = <STDIN>;
-      chomp($userWantDelete);
-   }
-
-   # check the reply #
-   if( $userWantDelete eq "yes" ) {
+} else {
+   if( askYesOrNo("Would you like to delete the old student's accounts ?") eq "yes" ) {
       $deleteStudents = 1;
    }
 }
 
 
 ################
-#   std sub    #
+#   local lib  #
 ################
 
+# save current used login #
+my %usedLogin;
+
+sub getAllUsersLogin {
+
+   # get all users #
+   open( my $ldbCall, "-|:encoding(UTF-8)", "s4ldbsearch $baseUserDN,$baseDN sub user '()' cn" );
+   while( my $userInfoLine = <$ldbCall> ) {
+
+      chomp($userInfoLine);
+
+      # save cn #
+      my @userInfo = split(/\t/, $userInfoLine, -1);
+      my $userCn = $userInfo[1];
+      $usedLogin{$userCn} = 'true';
+   }
+      
+   close($ldbCall);
+}
+
+getAllUsersLogin();
+
+# remove special caracters #
 sub removeSpecials {
    my ($string) = @_;
    if( ! defined($string) ) {
@@ -225,15 +258,17 @@ sub removeSpecials {
    return $string;
 }
 
+# generate login with #
+# -> $loginSurnameChar characters + $loginGivennameChar characters
 sub getLogin {
-   my ($sName, $gName) = @_;
+   my ($surname, $givename) = @_;
 
    # remove specials caracters #
-   my $bsName = removeSpecials($sName);
-   my $bgName = removeSpecials($gName);
+   my $baseSurname = removeSpecials($surname);
+   my $baseGivenname = removeSpecials($givename);
 
    # create login #
-   my $login = substr($bsName, 0, $loginSurnameChar) . substr($bgName, 0, $loginGivennameChar);
+   my $login = substr($baseSurname, 0, $loginSurnameChar) . substr($baseGivenname, 0, $loginGivennameChar);
    
    # remove double underscore #
    $login =~ s/_{2,}/_/g;
@@ -242,23 +277,27 @@ sub getLogin {
 }
 
 
+
+
 #######################
 #  LDB base           #
 #  getting students   #
 #######################
-use XML::LibXML::Simple;
 
 sub GetLDBStudents {
 
-   open(LDBS,"s4ldbsearch $studentBaseDN sub user '()' cn sn givenName serialNumber employeeNumber displayName telephoneNumber mail|") or die("Cannot launch s4ldbsearch command");
+   # get all students #
+   open(my $ldbCall, "-|:encoding(UTF-8)", "s4ldbsearch $studentBaseDN sub user '()' cn sn givenName serialNumber employeeNumber displayName telephoneNumber mail") or die("Cannot launch s4ldbsearch command !\n");
 
    # build the user list #
    my @ldbusers;
    my $userIdx = 0;
-   while( my $userInfoLine = <LDBS> ) {
+   while( my $userInfoLine = <$ldbCall> ) {
 
-      my @userInfo = split(/\t/, $userInfoLine);
-      my @userDNParts = split(/,/, $userInfo[0]);
+      chomp($userInfoLine);
+
+      my @userInfo = split(/\t/, $userInfoLine, -1);
+      my @userDNParts = split(/,/, $userInfo[0], -1);
 
       $ldbusers[$userIdx]{'class'} = substr($userDNParts[1], length('OU='));
       $ldbusers[$userIdx]{'login'} = $userInfo[1];
@@ -269,13 +308,12 @@ sub GetLDBStudents {
       $ldbusers[$userIdx]{'completeName'} = $userInfo[6];
       $ldbusers[$userIdx]{'telephoneNumber'} = $userInfo[7];
       $ldbusers[$userIdx]{'mail'} = lc($userInfo[8]);
-      }
-
+      
       # next user #
       $userIdx++;
    }
 
-   close(LDBS);
+   close($ldbCall);
    return @ldbusers;
 }
 
@@ -284,6 +322,7 @@ sub GetLDBStudents {
 #  SCONET base        #
 #  getting students   #
 #######################
+use XML::LibXML::Simple;
 use XML::SAX::ParserFactory;
 use XML::SAX::Base;
 
@@ -295,13 +334,13 @@ sub GetSCONETStudents {
    my $encodingTag;
    my $encoding;
 
-   open(HDL,"$fileName") or die("Cannot open $fileName");
-   $encodingTag = <HDL>;
+   open(my $sconetFile, "<", "$fileName") or die("Cannot open $fileName");
+   $encodingTag = <$sconetFile>;
    chomp($encodingTag);
 
    if( ! ($encodingTag =~ m/<\?xml.*\?>/) ) {
       print( "The file given is not a xml file !\n");
-      exit(0);
+      exit(1);
    }
 
    if ( $encodingTag =~ /encoding=\"(.*?)\"/ ) {
@@ -310,13 +349,12 @@ sub GetSCONETStudents {
       $encoding = 'utf8';
    }
 
-   seek(HDL, 0, 0);
+   seek($sconetFile, 0, 0);
 
    # parse the file $
    my $handler = MyHandler->new;
    my $parser = XML::SAX::ParserFactory->parser();
-   $parser->parse(Handler => $handler, Source => { ByteStream => 'main::HDL', Encoding => "$encoding" } );
-
+   $parser->parse(Handler => $handler, Source => { ByteStream => $sconetFile, Encoding => "$encoding" } );
 
    # remove students not affected in classes #
    # and save login #
@@ -332,7 +370,7 @@ sub GetSCONETStudents {
    }
 
    # return #
-   close(HDL);
+   close($sconetFile);
    return %students;
 }
 
@@ -340,7 +378,6 @@ sub GetSCONETStudents {
 #      MAIN         #
 #####################
 #####################
-use Data::Dumper; 
 
 ###################
 # get dabatabases #
@@ -351,138 +388,153 @@ print "Reading Samba database... \n";
 my @LDBStudents = GetLDBStudents();
 print "Comparing databases... \n";
 
-#########################
-# search correspondence #
-#########################
-my @usedLdbIdx;
+####################################
+# try to identify sconet students  #
+# already present in ldb database  #
+####################################
+
+#--------------------------------#
+# 1) first try with national id  #
+#--------------------------------#
 foreach my $key (keys %SCONETStudents) {
 
+   # check if sconet student already associated #
+   if( defined($SCONETStudents{$key}{ldbIndex}) ) {
+      next;
+   }
+
    my @findIdx;
-   my @loginIdx;
 
-   # try national id #
+   # check if national id defined #
    if( defined($SCONETStudents{$key}{id}) ) {
+
+      # search ldb student with same ID not already associated #
       my $id = $SCONETStudents{$key}{id}; 
-      @findIdx = grep { defined($LDBStudents[$_]{id}) && $LDBStudents[$_]{id} eq $id } 0..$#LDBStudents;
+      @findIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) && defined($LDBStudents[$_]{id}) && $LDBStudents[$_]{id} eq $id } 0..$#LDBStudents;
+
+      # if only one match, save #
       if( @findIdx == 1 ) {
-         # check if the user is not already associated #
-         if( ! ($findIdx[0] ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
-            push(@usedLdbIdx, $findIdx[0]); 
-            next;
-         }
-      }
-   }
-
-   # try with the local id #
-   # we need at least another good param #
-   my $localId = $key;
-   @findIdx = grep { defined($LDBStudents[$_]{localId}) && $LDBStudents[$_]{localId} eq $localId } 0..$#LDBStudents;
-   if( @findIdx == 1 ) {
-      # try to confirm #
-      my $foundIdx = $findIdx[0];
-      my $login = $SCONETStudents{$key}{login};
-      my $studentClass = $SCONETStudents{$key}{class};
-      if( ($LDBStudents[$foundIdx]{login}  =~ m/^$login[0-9]*/) ||
-          (defined($LDBStudents[$foundIdx]{surName}) && removeSpecials($LDBStudents[$foundIdx]{surName}) eq removeSpecials($SCONETStudents{$key}{surName}) ) ||
-          (defined($LDBStudents[$foundIdx]{givenName}) && removeSpecials($LDBStudents[$foundIdx]{givenName}) eq removeSpecials($SCONETStudents{$key}{givenName}) ) ||
-          ($LDBStudents[$foundIdx]{class} eq $studentClass)  ){
-         if( ! ($foundIdx ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $foundIdx;
-            push(@usedLdbIdx, $foundIdx);
-            next;
-         }
-      }
-   }
- 
-
-   # try direct login #
-   # save the result loginIdx fot later use #
-   # if the user have a id or local id we need to confirm # 
-   my $login = $SCONETStudents{$key}{login};
-   @loginIdx = grep { $LDBStudents[$_]{login} =~ m/^$login[0-9]*/ } 0..$#LDBStudents;
-   if( @loginIdx == 1 ) {
-      my $foundIdx = $loginIdx[0];
-      
-      # try to confirm #
-      my $studentClass = $SCONETStudents{$key}{class};
-      if( (! defined($LDBStudents[$foundIdx]{id}) && ! defined($LDBStudents[$foundIdx]{localId}) ) ||
-          (defined($LDBStudents[$foundIdx]{surName}) && removeSpecials($LDBStudents[$foundIdx]{surName}) eq removeSpecials($SCONETStudents{$key}{surName}) ) ||
-          (defined($LDBStudents[$foundIdx]{givenName}) && removeSpecials($LDBStudents[$foundIdx]{givenName}) eq removeSpecials($SCONETStudents{$key}{givenName}) ) ||
-          ($LDBStudents[$foundIdx]{class} eq $studentClass)  ){
-         if( ! ($foundIdx ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $foundIdx;
-            push(@usedLdbIdx, $foundIdx);
-            next;
-         }
-      }
-   }
-
-   # try surName and givenName #
-   my $completeName = removeSpecials($SCONETStudents{$key}{surName}).removeSpecials($SCONETStudents{$key}{givenName}); 
-   @findIdx = grep { defined($LDBStudents[$_]{surName}) &&
-                     defined($LDBStudents[$_]{givenName}) &&
-                     removeSpecials($LDBStudents[$_]{surName}).removeSpecials($LDBStudents[$_]{givenName}) eq $completeName } 0..$#LDBStudents;   
-   if( @findIdx == 1 ) {
-      if( ! ($findIdx[0] ~~ @usedLdbIdx) ) {
          $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
-         push(@usedLdbIdx, $findIdx[0]);
-         next;
-      }
-   }
-
-   ###########################
-   # if multiple login found #
-   ###########################
-   if ( @loginIdx > 1 ) {
-      my @resultIdx;
-
-      # try with only the surname #
-      my $surName = removeSpecials($SCONETStudents{$key}{surName});
-      @resultIdx = grep { ! defined($LDBStudents[$_]{surName}) || (defined($LDBStudents[$_]{surName}) && removeSpecials($LDBStudents[$_]{surName}) eq $surName) } @loginIdx; 
-      if( @resultIdx == 1 ) {
-         if( ! ($resultIdx[0] ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $resultIdx[0];
-            push(@usedLdbIdx, $resultIdx[0]);
-            next;
-         }
-      }
-
-      # try with only the givenname #
-      my $givenName = removeSpecials($SCONETStudents{$key}{givenName});
-      @resultIdx = grep { defined($LDBStudents[$_]{givenName}) && removeSpecials($LDBStudents[$_]{givenName}) eq $givenName } @loginIdx; 
-      if( @resultIdx == 1 ) {
-         if( ! ($resultIdx[0] ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $resultIdx[0];
-            push(@usedLdbIdx, $resultIdx[0]);
-            next;
-         }
-      }
-
-      # try with the class #
-      my $studentClass = $SCONETStudents{$key}{class};
-      @resultIdx = grep { $LDBStudents[$_]{class} eq $studentClass } @loginIdx;
-      if( @resultIdx == 1 ) {
-         if( ! ($resultIdx[0] ~~ @usedLdbIdx) ) {
-            $SCONETStudents{$key}{ldbIndex} = $resultIdx[0];
-            push(@usedLdbIdx, $resultIdx[0]);
-            next;
-         }
+         $LDBStudents[$findIdx[0]]{sconetKey} = $key;
       }
    }
 }
 
-
-#################################
-# mark found students           #
-# we need to remove the others  #
-#################################
+#----------------------------------------#
+# 2) try with good surname and givenname #
+#----------------------------------------#
 foreach my $key (keys %SCONETStudents) {
+
+   # check if sconet student already associated #
    if( defined($SCONETStudents{$key}{ldbIndex}) ) {
-      my $idx = $SCONETStudents{$key}{ldbIndex};
-      $LDBStudents[$idx]{sconetKey} = $key;
+      next;
    }
-} 
+
+   my @findIdx;
+
+   # search ldb student not already associated #
+   # with good surname AND givenname #
+   @findIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) &&
+                     ( defined($LDBStudents[$_]{surName}) && removeSpecials($LDBStudents[$_]{surName}) eq removeSpecials($SCONETStudents{$key}{surName}) ) &&
+                     ( defined($LDBStudents[$_]{givenName}) && removeSpecials($LDBStudents[$_]{givenName}) eq removeSpecials($SCONETStudents{$key}{givenName}) ) 
+                   } 0..$#LDBStudents;
+
+   # if only one match, save #
+   if( @findIdx == 1 ) {
+      $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
+      $LDBStudents[$findIdx[0]]{sconetKey} = $key;
+   }
+}
+
+#--------------------------------------------#
+# 3) try with local id + another good param  #
+#--------------------------------------------#
+foreach my $key (keys %SCONETStudents) {
+
+   # check if sconet student already associated #
+   if( defined($SCONETStudents{$key}{ldbIndex}) ) {
+      next;
+   }
+
+   my @findIdx;
+
+   # search ldb student not already associated #
+   # with a good local ID #
+   # and at least one good login, surname, givenname or class #
+   my $localId = $key;
+   my $login = $SCONETStudents{$key}{login};
+   my $studentClass = $SCONETStudents{$key}{class};
+
+   @findIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) &&
+                     ( defined($LDBStudents[$_]{localId}) && $LDBStudents[$_]{localId} eq $localId ) &&
+                     ( ($LDBStudents[$_]{login} =~ m/^$login[0-9]*$/) ||
+                       (defined($LDBStudents[$_]{surName}) && removeSpecials($LDBStudents[$_]{surName}) eq removeSpecials($SCONETStudents{$key}{surName}) ) ||
+                       (defined($LDBStudents[$_]{givenName}) && removeSpecials($LDBStudents[$_]{givenName}) eq removeSpecials($SCONETStudents{$key}{givenName}) ) ||
+                       ($LDBStudents[$_]{class} eq $studentClass) ) } 0..$#LDBStudents; 
+
+   # if only one match, save #
+   if( @findIdx == 1 ) {
+      $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
+      $LDBStudents[$findIdx[0]]{sconetKey} = $key;
+   }
+}
+
+#----------------------------------------#
+# 4) try with login + another good param #
+#----------------------------------------#
+foreach my $key (keys %SCONETStudents) {
+
+   # check if sconet student already associated #
+   if( defined($SCONETStudents{$key}{ldbIndex}) ) {
+      next;
+   }
+
+   my @findIdx;
+
+   # search ldb student not already associated #
+   # with coherent login #
+   # and good surname, givename or class #
+   my $login = $SCONETStudents{$key}{login};
+   my $studentClass = $SCONETStudents{$key}{class};
+
+   @findIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) &&
+                     $LDBStudents[$_]{login} =~ m/^$login[0-9]*$/ &&
+                     ( ( defined($LDBStudents[$_]{surName}) && removeSpecials($LDBStudents[$_]{surName}) eq removeSpecials($SCONETStudents{$key}{surName}) ) ||
+                       ( defined($LDBStudents[$_]{givenName}) && removeSpecials($LDBStudents[$_]{givenName}) eq removeSpecials($SCONETStudents{$key}{givenName}) ) ||
+                       ($LDBStudents[$_]{class} eq $studentClass) ) } 0..$#LDBStudents;
+
+   # if only one match, save #
+   if( @findIdx == 1 ) {
+      $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
+      $LDBStudents[$findIdx[0]]{sconetKey} = $key;
+   }
+}
+
+#------------------------#
+# 5) try with just login #
+#------------------------#
+foreach my $key (keys %SCONETStudents) {
+
+   # check if sconet student already associated #
+   if( defined($SCONETStudents{$key}{ldbIndex}) ) {
+      next;
+   }
+
+   my @findIdx;
+
+   # search ldb student not already associated #
+   # with coherent login #
+   my $login = $SCONETStudents{$key}{login};
+
+   @findIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) &&
+                     $LDBStudents[$_]{login} =~ m/^$login[0-9]*$/ } 0..$#LDBStudents;
+
+   # if only one match, save #
+   if( @findIdx == 1 ) {
+      $SCONETStudents{$key}{ldbIndex} = $findIdx[0];
+      $LDBStudents[$findIdx[0]]{sconetKey} = $key;
+   }
+}
 
 
 ######################################
@@ -502,32 +554,25 @@ foreach my $key (keys %SCONETStudents) {
 my %sconetClasses;
 
 foreach my $key (keys %SCONETStudents) {
-   $sconetClasses{ $SCONETStudents{$key}{class} } = ();
+   $sconetClasses{ $SCONETStudents{$key}{class} } = 'true';
 }
 
-# get the set of local classes #
-my $baseClassDir = "$unixHomePath/$baseStudentDir";
-my $baseClassDirHdl; 
+# get the set of ldb student classes #
+my %ldbClasses;
 
-#opendir($baseClassDirHdl, $baseClassDir) || die "can't opendir $baseClassDir: $!"; 
-#my @localClasses = grep { ! /^\./ && $_ ne $teachersDirName && -d "$baseClassDir/$_" } readdir($baseClassDirHdl);
-#closedir($baseClassDirHdl);
-
-my @localClasses;
-#this select the studentBaseStudentDN ou, but this is not a problem to test the inclusion
-open(LDBS,"s4ldbsearch $studentBaseDN one ou '()' ou |") or die("Cannot launch s4ldbsearch command");
-while( my $line = <LDBS> ) {
+open(my $ldbCall, "-|:encoding(UTF-8)", "s4ldbsearch $studentBaseDN one ou '()' ou") or die("Cannot launch s4ldbsearch command !\n");
+while( my $line = <$ldbCall> ) {
    chomp($line);
-   my $class = (split(/\t/, $line))[1];
-   push @localClasses, $class;
+   my $class = (split(/\t/, $line, -1))[1];
+   $ldbClasses{$class} = 'true';
 }
-     
+close($ldbCall);
 
 # check if we need to create classes #
 my @createClasses;
 
 foreach my $class (keys %sconetClasses) {
-   if( ! ($class ~~ @localClasses) ) {
+   if( ! defined($ldbClasses{$class}) ) {
       push(@createClasses, $class);
    }
 }
@@ -543,11 +588,11 @@ if ( @createClasses > 0 ) {
 }
 
 
-# check if we need  to delete classes #
+# check if we need to delete classes #
 my @deleteClasses;
 
-foreach my $class (@localClasses) {
-   if( ! exists( $sconetClasses{$class} ) ) {
+foreach my $class (keys %ldbClasses) {
+   if( ! defined($sconetClasses{$class}) ) {
       push(@deleteClasses, $class);
    }
 }
@@ -571,10 +616,22 @@ if ( $deleteStudents && @deleteClasses > 0 ) {
 # DELETE #
 ##########
 
+# students to delete # 
 my @deleteIdx ;
+
 if( $deleteStudents ) {
-   # students to delete # 
-   @deleteIdx = grep { ! defined($LDBStudents[$_]{sconetKey}) } 0..$#LDBStudents;
+
+   foreach my $ldbStudentIdx (0..$#LDBStudents) {
+      if( ! defined($LDBStudents[$ldbStudentIdx]{sconetKey}) ) {
+
+         # add student to the delete list #
+         push @deleteIdx, $ldbStudentIdx;
+
+         # free the login #
+         my $userLogin = $LDBStudents[$ldbStudentIdx]{login};
+         delete($usedLogin{$userLogin});
+      }
+   }
 
    # print result #
    if ( @deleteIdx > 0 ) {
@@ -582,6 +639,10 @@ if( $deleteStudents ) {
       print("The following students need to be deleted :\n");
       print("-------------------------------------------\n");
       foreach my $idx (@deleteIdx) {
+
+         # save the delete action #
+         $LDBStudents[$idx]{delete} = 'true';
+
          if ( defined($LDBStudents[$idx]{surName}) && defined($LDBStudents[$idx]{givenName}) ) {
             print( "$LDBStudents[$idx]{surName} $LDBStudents[$idx]{givenName}: login=$LDBStudents[$idx]{login}, class=$LDBStudents[$idx]{class}\n");
          } else {
@@ -605,7 +666,7 @@ my @createKeys = grep {  ! defined($SCONETStudents{$_}{ldbIndex})  } keys %SCONE
 my $passwordFile;
 my @usersPasswords;
 
-if( $optPasswordFile && -e $optPasswordFile ) {
+if( defined($optPasswordFile) && -e $optPasswordFile ) {
    # read the password file entierely #
    open($passwordFile, "<:encoding(UTF-8)", "$optPasswordFile") or die("Cannot open password file $optPasswordFile");
    @usersPasswords = <$passwordFile>;
@@ -626,11 +687,11 @@ sub getPasswordLine {
    # check with the three params #
    my @matchLineIdx; # in the case we can't use the class, the lines where givenName, surName match
    foreach my $lineIdx (0..$#usersPasswords) {
-      my ($passwordClass, $passwordGivenName, $passwordSurName) = split(/,/, $usersPasswords[$lineIdx]);
+      my ($passwordClass, $passwordGivenName, $passwordSurName) = split(/,/, $usersPasswords[$lineIdx], -1);
       my $passwordTag = removeSpecials($passwordGivenName).removeSpecials($passwordSurName);
       if( $inputTag eq $passwordTag ) {
          push(@matchLineIdx, $lineIdx);
-         if( $class = $passwordClass ) {
+         if( $class eq $passwordClass ) {
             $foundlineIdx = $lineIdx;
             last;
          }
@@ -645,7 +706,7 @@ sub getPasswordLine {
 
    # if line found get the other params #
    if( defined($foundlineIdx) ) {
-      ($foundLogin, $foundPassword) = (split(/,/, $usersPasswords[$foundlineIdx]))[3,4];
+      ($foundLogin, $foundPassword) = (split(/,/, $usersPasswords[$foundlineIdx], -1))[3,4];
       chomp($foundPassword);
       if( $foundLogin =~ m/^\s*$/ ) {
          $foundLogin = undef;
@@ -674,7 +735,7 @@ sub setPasswordLine {
 
 # create password generator if needed #
 my $passwordGenerator;
-if( $optRandomPassword ) {
+if( defined($optRandomPassword) ) {
    $passwordGenerator = String::Random->new;
 }
 
@@ -702,30 +763,11 @@ foreach my $key (@createKeys) {
    # if proposed login #
    # check if it not already used #
    if( defined($proposedLogin) ) {
-      my $proposedLoginUsed;
-  
-      # check current students that are not deleted #
-      if( ! $deleteStudents ) {
-         foreach my $studentIdx (0..$#LDBStudents) {
-            if( $LDBStudents[$studentIdx]{login} eq $proposedLogin ) {
-               $proposedLoginUsed = 1;
-               last;
-            }
-         }
-      }
-      # check new students where newlogin is set #
-      if( ! $proposedLoginUsed ) {
-         foreach my $studentKey (keys %SCONETStudents) {
-            if( defined($SCONETStudents{$studentKey}{newLogin}) && $SCONETStudents{$studentKey}{newLogin} eq $proposedLogin ) {
-               $proposedLoginUsed = 1;
-               last;
-            }
-         }
-      }
 
-      # check if we can use proposed login #
-      if( ! $proposedLoginUsed ) {
+      # if proposed login is free, use it #
+      if( ! defined($usedLogin{$proposedLogin}) ) {
          $SCONETStudents{$key}{newLogin} = $proposedLogin;
+         $usedLogin{$proposedLogin} = 'true';
       }
    }
 
@@ -733,33 +775,26 @@ foreach my $key (@createKeys) {
    # generate it #
    if( ! defined( $SCONETStudents{$key}{newLogin} ) ) {
 
+      # get simplest login #
       my $baseLogin = $SCONETStudents{$key}{login};
-      my @loginList; #similar logins
+      my $currentLogin = $baseLogin;
+      my $currentLoginNumber = 1;
 
-      # get the same logins #
-      # check the current students that are not deleted #
-      foreach my $studentIdx (0..$#LDBStudents) {
-         if( (! $deleteStudents || defined($LDBStudents[$studentIdx]{sconetKey})) && $LDBStudents[$studentIdx]{login}  =~ m/^$baseLogin[0-9]*/ ) {
-            push( @loginList, $LDBStudents[$studentIdx]{login} );
-         }
-      }
+      # increase the login number while the login is used # 
+      while( 1 ) {
 
-      # check the new students #
-      foreach my $studentKey (keys %SCONETStudents) {
-         if( defined($SCONETStudents{$studentKey}{newLogin}) && $SCONETStudents{$studentKey}{newLogin}  =~ m/^$baseLogin[0-9]*/ ) {
-            push( @loginList, $SCONETStudents{$studentKey}{newLogin} );
+         # if the current login is free, use it #
+         if( ! defined($usedLogin{$currentLogin}) ) {
+            $SCONETStudents{$key}{newLogin} = $currentLogin;
+            $usedLogin{$currentLogin} = 'true';
+            last;
          }
-      }
 
-      # create new login #
-      if( @loginList == 0 ) {
-         $SCONETStudents{$key}{newLogin} = $baseLogin;
-      } else {
-         my $count = 2;
-         while( $baseLogin.$count ~~ @loginList ) {
-            $count++;
+         # else try next login #
+         else {
+            $currentLoginNumber++;
+            $currentLogin = "${baseLogin}${currentLoginNumber}"
          }
-         $SCONETStudents{$key}{newLogin} = $baseLogin.$count;
       }
    }
 
@@ -769,7 +804,7 @@ foreach my $key (@createKeys) {
    if( defined($proposedPassword) ) {
       $SCONETStudents{$key}{newPassword} = $proposedPassword;
    }
-   elsif( $optRandomPassword ) {
+   elsif( defined($optRandomPassword) ) {
       $SCONETStudents{$key}{newPassword} = $passwordGenerator->randregex("[a-z]{$loginSurnameChar}[0-9]{$loginGivennameChar}");
    } else {
       $SCONETStudents{$key}{newPassword} = $SCONETStudents{$key}{newLogin}
@@ -778,7 +813,7 @@ foreach my $key (@createKeys) {
    ###############
    # save result #
    ###############
-   if( $optPasswordFile ) {
+   if( defined($optPasswordFile) ) {
       setPasswordLine($proposedLineIdx,
                       $SCONETStudents{$key}{class},
                       $SCONETStudents{$key}{givenName},
@@ -805,7 +840,7 @@ if ( @createKeys > 0 ) {
 ########
 
 # students to move #
-my @moveKeys = grep {  defined($SCONETStudents{$_}{ldbIndex}) && $SCONETStudents{$_}{class} ne $LDBStudents[$SCONETStudents{$_}{ldbIndex}]{class}  } keys %SCONETStudents;
+my @moveKeys = grep { defined($SCONETStudents{$_}{ldbIndex}) && ($SCONETStudents{$_}{class} ne $LDBStudents[$SCONETStudents{$_}{ldbIndex}]{class}) } keys %SCONETStudents;
 
 # get the real login #
 foreach my $key (@moveKeys) {
@@ -833,7 +868,7 @@ foreach my $key (keys %SCONETStudents) {
    # for the new users the data will be automatically updated #
    if( ! defined($SCONETStudents{$key}{newLogin}) && defined($SCONETStudents{$key}{ldbIndex}) ) {
 
-     my $ldbIndex = $SCONETStudents{$key}{ldbIndex};
+      my $ldbIndex = $SCONETStudents{$key}{ldbIndex};
       
       # check id #
       # normally should never be changed #
@@ -849,7 +884,6 @@ foreach my $key (keys %SCONETStudents) {
             $SCONETStudents{$key}{setLocalId} = 1;
             $studentsDataUpdated = 1;
       }
-
 
       # only if the user want #
       if( $checkStudentData ) {
@@ -967,7 +1001,7 @@ if( $studentsDataUpdated ) {
 my $updateScript;
 
 if( $optUpdateScript ) {
-   open($updateScript, "> $optUpdateScript") or die("Cannot create script file $optUpdateScript");
+   open($updateScript, ">:encoding(UTF-8)", "$optUpdateScript") or die("Cannot create script file $optUpdateScript");
    print $updateScript "\#! /bin/bash\n";
    print $updateScript "\n";
    chmod(0755, $optUpdateScript); 
@@ -977,7 +1011,7 @@ sub doUpdate {
    my ($msg, $cmd) = @_;
 
    # update script case #
-   if( $optUpdateScript ) {
+   if( defined($optUpdateScript) ) {
       print $updateScript "echo \"$msg\"\n";
       print $updateScript "$cmd\n";
    }
@@ -996,7 +1030,7 @@ if( ! @createClasses && (! $deleteStudents || ! @deleteClasses) && (! $deleteStu
    print("---------------------\n");
    print(" Nothing to update ! \n");
    print("---------------------\n");
-   exit(1);
+   exit(0);
 }
 
 
@@ -1007,32 +1041,27 @@ if( ! @createClasses && (! $deleteStudents || ! @deleteClasses) && (! $deleteStu
 # never update directly without user action #
 # if the script is not interactive the user need #
 # to output a script #
-if( $optNoInteractive && ! $optUpdateScript ) {
+if( defined($optNoInteractive) && ! defined($optUpdateScript) ) {
    print("Changes are not applied without user confimation !\n");
    print("Remove the no interactive option or output a script.\n");
    exit 0;
 }
 
 # check if interaction #
-if( ! $optNoInteractive ) {
-   my $userRep = " ";
-   while( $userRep ne "yes" && $userRep ne "no") {
-      print "Would you like to apply there changes ? (yes/no) ";
-      $userRep = <STDIN>;
-      chomp($userRep);
-   }
-   exit 0 if ($userRep eq "no");
+if( askYesOrNo("Would you like to apply there changes ?") ne "yes" ) {
+   exit(0);
 }
 
 ##################
 # open ldif file #
 ##################
 my $ldifFileName = "samba".int(rand(10000)).".ldif";
-if( ! open(LDIF,">/tmp/$ldifFileName") ) {
+my $ldifFile;
+
+if( ! open($ldifFile, ">:encoding(UTF-8)", "/tmp/$ldifFileName") ) {
    print("error : can't create ldif file in /tmp \n");
    exit(1);
 }
-binmode( LDIF, ':encoding(UTF-8)');
 
 
 #################
@@ -1051,12 +1080,12 @@ if( $deleteStudents ) {
 ##################
 # delete classes #
 ##################
-#if( $deleteStudents ) {
-#   foreach my $class (@deleteClasses) {
-#      doUpdate("--- Deleting class $class ---",
-#               "s4studentclassdel $class");
-#   }
-#}
+if( $deleteStudents ) {
+   foreach my $class (@deleteClasses) {
+      doUpdate("--- Deleting class $class ---",
+               "s4classdel -f $class");
+   }
+}
 
 
 ##################
@@ -1083,45 +1112,45 @@ foreach my $key (@createKeys) {
    }
 
    # write ldif dn entry #
-   print( LDIF "dn: CN=$SCONETStudents{$key}{newLogin},OU=".uc($SCONETStudents{$key}{class}).",$studentBaseDN\n");
-   print( LDIF "changetype: modify\n");
+   print( $ldifFile "dn: CN=$SCONETStudents{$key}{newLogin},OU=".uc($SCONETStudents{$key}{class}).",$studentBaseDN\n");
+   print( $ldifFile "changetype: modify\n");
    
    # write data #
    if( defined($SCONETStudents{$key}{id}) ) {
-      print( LDIF "replace: serialNumber\n");
-      print( LDIF "serialNumber: $SCONETStudents{$key}{id}\n");
+      print( $ldifFile "replace: serialNumber\n");
+      print( $ldifFile "serialNumber: $SCONETStudents{$key}{id}\n");
    }
    
-   print( LDIF "replace: employeeNumber\n");
-   print( LDIF "employeeNumber: $key\n");
+   print( $ldifFile "replace: employeeNumber\n");
+   print( $ldifFile "employeeNumber: $key\n");
 
    if( defined($SCONETStudents{$key}{surName}) ) {
-      print( LDIF "replace: sn\n");
-      print( LDIF "sn: $SCONETStudents{$key}{surName}\n");
+      print( $ldifFile "replace: sn\n");
+      print( $ldifFile "sn: $SCONETStudents{$key}{surName}\n");
    }
 
    if( defined($SCONETStudents{$key}{givenName}) ) {   
-      print( LDIF "replace: givenName\n");
-      print( LDIF "givenName: $SCONETStudents{$key}{givenName}\n");
+      print( $ldifFile "replace: givenName\n");
+      print( $ldifFile "givenName: $SCONETStudents{$key}{givenName}\n");
    }
 
    if( defined($SCONETStudents{$key}{completeName}) ) {
-      print( LDIF "replace: displayName\n");
-      print( LDIF "displayName: $SCONETStudents{$key}{completeName}\n");
+      print( $ldifFile "replace: displayName\n");
+      print( $ldifFile "displayName: $SCONETStudents{$key}{completeName}\n");
    }
 
    if( defined($SCONETStudents{$key}{telephoneNumber}) ) {
-      print( LDIF "replace: telephoneNumber\n");
-      print( LDIF "telephoneNumber: $SCONETStudents{$key}{telephoneNumber}\n");
+      print( $ldifFile "replace: telephoneNumber\n");
+      print( $ldifFile "telephoneNumber: $SCONETStudents{$key}{telephoneNumber}\n");
    }
 
    if( defined($SCONETStudents{$key}{mail}) ) {
-      print( LDIF "replace: mail\n");
-      print( LDIF "mail: $SCONETStudents{$key}{mail}\n");
+      print( $ldifFile "replace: mail\n");
+      print( $ldifFile "mail: $SCONETStudents{$key}{mail}\n");
    }
 
    # next student #
-   print( LDIF "\n");
+   print( $ldifFile "\n");
 }
 
 #################
@@ -1150,53 +1179,53 @@ foreach my $key (keys %SCONETStudents) {
       my $login = $LDBStudents[$SCONETStudents{$key}{ldbIndex}]{login};
 
       # write ldif dn entry #
-      print( LDIF "dn: CN=$login,OU=".uc($SCONETStudents{$key}{class}).",$studentBaseDN\n");
-      print( LDIF "changetype: modify\n");
+      print( $ldifFile "dn: CN=$login,OU=".uc($SCONETStudents{$key}{class}).",$studentBaseDN\n");
+      print( $ldifFile "changetype: modify\n");
 
       # setId #
       if( $SCONETStudents{$key}{setId} ) {
-         print( LDIF "replace: serialNumber\n");
-         print( LDIF "serialNumber: $SCONETStudents{$key}{id}\n");
+         print( $ldifFile "replace: serialNumber\n");
+         print( $ldifFile "serialNumber: $SCONETStudents{$key}{id}\n");
       }
 
       # setLocalId #
       if( $SCONETStudents{$key}{setLocalId} ) {
-         print( LDIF "replace: employeeNumber\n");
-         print( LDIF "employeeNumber: $key\n");
+         print( $ldifFile "replace: employeeNumber\n");
+         print( $ldifFile "employeeNumber: $key\n");
       }
 
       # setName #
       if( $SCONETStudents{$key}{setName} ) {
-         print( LDIF "replace: sn\n");
-         print( LDIF "sn: $SCONETStudents{$key}{surName}\n");
-         print( LDIF "replace: givenName\n");
-         print( LDIF "givenName: $SCONETStudents{$key}{givenName}\n");
-         print( LDIF "replace: displayName\n");
-         print( LDIF "displayName: $SCONETStudents{$key}{completeName}\n");
+         print( $ldifFile "replace: sn\n");
+         print( $ldifFile "sn: $SCONETStudents{$key}{surName}\n");
+         print( $ldifFile "replace: givenName\n");
+         print( $ldifFile "givenName: $SCONETStudents{$key}{givenName}\n");
+         print( $ldifFile "replace: displayName\n");
+         print( $ldifFile "displayName: $SCONETStudents{$key}{completeName}\n");
 
       }
 
       # setMail #
       if( $SCONETStudents{$key}{setMail} ) {
-         print( LDIF "replace: mail\n");
-         print( LDIF "mail: $SCONETStudents{$key}{mail}\n");
+         print( $ldifFile "replace: mail\n");
+         print( $ldifFile "mail: $SCONETStudents{$key}{mail}\n");
       }
    
       # setTelephoneNumber #
       if( $SCONETStudents{$key}{setTelephoneNumber} ) {
-         print( LDIF "replace: telephoneNumber\n");
-         print( LDIF "telephoneNumber: $SCONETStudents{$key}{telephoneNumber}\n");
+         print( $ldifFile "replace: telephoneNumber\n");
+         print( $ldifFile "telephoneNumber: $SCONETStudents{$key}{telephoneNumber}\n");
       }
 
       # next student #
-      print( LDIF "\n");
+      print( $ldifFile "\n");
    }
 }
 
 ##############
 # apply LDIF #
 ##############
-close(LDIF);
+close($ldifFile);
 
 if( ! $optUpdateScript ) {
    doUpdate("--- Applying ldif /tmp/$ldifFileName ... ---",
@@ -1217,8 +1246,8 @@ else {
 # if needed           #
 #######################
 sub csvCmp {
-   my @fieldsA = split(/,/, $a);
-   my @fieldsB = split(/,/, $b);
+   my @fieldsA = split(/,/, $a, -1);
+   my @fieldsB = split(/,/, $b, -1);
    my $i = 0;
    while( defined($fieldsA[$i]) && defined($fieldsB[$i]) ) {
       if( my $compResult = $fieldsA[$i] cmp $fieldsB[$i] ) {
@@ -1245,8 +1274,7 @@ if( $optPasswordFile ) {
    @usersPasswords = sort csvCmp @usersPasswords;
 
    # write to file #  
-   open($passwordFile, "> $optPasswordFile") or die("Cannot open password file $optPasswordFile");
-   binmode($passwordFile, ':encoding(UTF-8)');   
+   open($passwordFile, ">:encoding(UTF-8)", "$optPasswordFile") or die("Cannot open password file $optPasswordFile");
    print $passwordFile @usersPasswords;
    close($passwordFile);
 }
