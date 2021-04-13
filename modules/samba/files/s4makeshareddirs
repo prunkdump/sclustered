@@ -5,6 +5,7 @@ use utf8;
 use File::Basename;
 use File::Path qw(make_path rmtree);
 use File::Find;
+use File::Copy;
 use Encode qw(decode);
 use Getopt::Long;
 use Sys::Hostname;
@@ -153,7 +154,7 @@ sub getUserUid {
       # save the result #
       chomp($userInfoLine);
       my $userUid;
-      $userUid  = (split(/\t/, $userInfoLine))[1];
+      $userUid  = (split(/\t/, $userInfoLine, -1))[1];
       $usersUid{$userName} = $userUid;
       return $userUid;
    }
@@ -182,7 +183,7 @@ sub getGroupGid {
    } else {
       # save the result #
       chomp($groupInfoLine);
-      my $groupGid = (split(/\t/, $groupInfoLine))[1];
+      my $groupGid = (split(/\t/, $groupInfoLine, -1))[1];
       $groupsGid{$groupName} = $groupGid;
       return $groupGid;
    }
@@ -434,7 +435,7 @@ sub getGroupDisplayName {
 
    # save #
    chomp($shareClassGroupInfoLine);
-   my $groupDisplayName = (split(/\t/, $shareClassGroupInfoLine))[1];
+   my $groupDisplayName = (split(/\t/, $shareClassGroupInfoLine, -1))[1];
    $groupsDisplayName{$groupDN} = $groupDisplayName;
    return $groupDisplayName;
 }
@@ -463,6 +464,39 @@ GetOptions("c|base-class=s" => \$optBaseClass,
 if( @ARGV != 0 ){
    displayUsage();
 }
+
+
+###############
+# ask library #
+###############
+
+sub askYesOrNo {
+
+   # get params, the questions #
+   my $question = $_[0];
+
+   # if no interactive return yes #
+   if( defined($optNoInteractive) ) {
+      return 'yes';
+   }
+
+   # ask #
+   while( 1 ) {
+      print("$question ([y]es or [N]o): ");
+      my $rep = <>;
+      if( $rep =~ m/^y(es|)$/ ) {
+         return 'yes';
+      }
+      elsif( $rep =~ m/^no?$/ ) {
+         return 'no';
+      }
+   }
+}
+
+
+##############
+# check args #
+##############
 
 # get the base class #
 my $baseClassName;
@@ -506,7 +540,6 @@ if( $? != 0 ) {
    exit(1);
 }
 
-
 # check the delete option #
 # can't be combined with a no root base class as we need to touch all files #
 # to check unused #
@@ -515,6 +548,19 @@ if ( ! $baseClassIsRoot && defined($optDelete) ) {
    exit(1);
 }
 
+# warning if delete without backup directory #
+# if not interractive without backup, delet will be disabled #
+if( ! defined($optNoInteractive) &&  defined($optDelete) && ! defined($optBackupDir) ) {
+   print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+   print("WARNING ! You have enabled deletion of unused data dirs\n");
+   print("without specifying backup dir with the -b option !\n");
+   print("So confirmation will be asked before permanently delete\n");
+   print("each data dir.\n");
+   print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+   if ( askYesOrNo("Are you sure you want continue like this ?") eq "no" ) {
+      exit(0);
+   }
+}     
 
 # check the backup dir #
 my $backupTimeString = localtime->strftime('%Y%m%d%H%M%S');
@@ -541,36 +587,6 @@ if( defined($optBackupDir) ) {
       exit(0);
    }
 }
-
-
-###############
-# ask library #
-###############
-
-sub askYesOrNo {
-
-   # get params, the questions #
-   my $question = $_[0];
-
-   # if no interactive return yes #
-   if( defined($optNoInteractive) ) {
-      return 'yes';
-   }
-
-   # ask #
-   while( 1 ) {
-      print("$question ([y]es or [N]o): ");
-      my $rep = <>;
-      if( $rep =~ m/^y(es|)$/ ) {
-         return 'yes';
-      }
-      elsif( $rep =~ m/^no?$/ ) {
-         return 'no';
-      }
-   }
-}
-
-
 
 
 ###################
@@ -645,7 +661,7 @@ while( my $userInfoLine = <$ldbCall> ) {
    chomp($userInfoLine);
 
    # get user info #
-   my ($userDn, $userName, $userHomeDirectory, $userUid, $userGid) = split(/\t/, $userInfoLine);
+   my ($userDn, $userName, $userHomeDirectory, $userUid, $userGid) = split(/\t/, $userInfoLine, -1);
 
    # get user class group #
    my $userClassGroup;
@@ -687,7 +703,7 @@ while( my $userInfoLine = <$ldbCall> ) {
 
          if ( $currentDirUid != $userUid) {
 
-            # bad uid ! this must be an old user dir, delete or restore later #
+            # bad uid ! this must be an old user dir, backup, delete or restore later #
             push @oldHomeDirs, "$unixHomePath/$userName";
             chown($userUid, $userGid, "$unixHomePath/$userName");
             system("setfacl -bk $unixHomePath/$userName");
@@ -839,7 +855,7 @@ while( my $shareInfoLine = <$ldbCall> ) {
 
    chomp($shareInfoLine);
 
-   my @shareInfo = split(/\t/, $shareInfoLine);
+   my @shareInfo = split(/\t/, $shareInfoLine, -1);
    push @sharesInfo, \@shareInfo;
 }
 
@@ -1219,6 +1235,7 @@ sub backupAndDeleteDir {
          }
       } else {
          # no need to backup #
+         print("Directory $deletePath is empty, no need to backup.\n");
          $backupSuccess = 'true';
       }
    }
@@ -1240,48 +1257,48 @@ sub backupAndDeleteDir {
 # date may need backups #
 #########################
 
-# old user dirs #
+# old users dirs #
+# with new user with same name #
 foreach my $oldHomeDir (@oldHomeDirs) {
 
+   # get saved uid and gid of the new user #
    my $changedUserName = basename($oldHomeDir);
    my ($changedUserUid, $changedUserGid) = (lstat($oldHomeDir))[4,5];
    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
    print("$oldHomeDir seems to be an old home dir.\n");
    print("But a new user with the same name now exist.\n");
 
-   # check action #
-   my $cleanAction;
+   # if backup dir is given, backup the user #
    if( defined($optBackupDir) ) {
-      $cleanAction = 'backup and delete';
-   } else {
-      $cleanAction = 'permanently delete';
+
+      # backup #
+      backupAndDeleteDir($oldHomeDir, 'home');
    }
 
-   # check if we need to delete #
-   # -> if no interactive with backp dir
-   # -> or if interactive with a yes reply
-   if( (defined($optNoInteractive) && defined($optBackupDir)) ||
-       ( ! defined($optNoInteractive) &&
-        askYesOrNo("Would you like to $cleanAction the old files ? if not they will be given to the new user.") eq "yes" ) ) {
-
-      # backup and delete #
-      backupAndDeleteDir($oldHomeDir, 'home');
-   } 
-
-   # else give the drectory to the new user #
+   # else move the directory #
    else {
 
-      # recursive chown #
-      print("Updating $oldHomeDir rights ...\n");
-      chown($changedUserUid, $changedUserGid, $oldHomeDir);
-      chmod(0700,$oldHomeDir);
-      system("setfacl -R -bk $oldHomeDir");
-      
-      find( sub {
-         chown($changedUserUid, $changedUserGid, $_);
-      }, $oldHomeDir );
-         
+      # search new name #
+      my $baseMoveDirName = "$oldHomeDir";
+      my $currentMoveDirName = "$oldHomeDir.old";
+      my $moveDirNameNumber = 1;
+
+      while( -e "$currentMoveDirName" ) {
+         $moveDirNameNumber++;
+         $currentMoveDirName = "$baseMoveDirName.old${moveDirNameNumber}";
+      }
+
+      # move #
+      print("Moving the directory to $currentMoveDirName\n");
+      print("as it can be deleted or backed up later on next run.\n");
+      move("$oldHomeDir", "$currentMoveDirName");
    }
+
+   # now create the new user directory #
+   touchDir("$unixHomePath/$changedUserName");
+   chown($changedUserUid, $changedUserGid, "$unixHomePath/$changedUserName");
+   chmod(0700, "$unixHomePath/$changedUserName");
+   
    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 }
 
@@ -1328,7 +1345,7 @@ if( defined($optDelete) ) {
          }
 
          # check if we need to delete #
-         # -> if no interactive with backp dir
+         # -> if no interactive with backup dir
          # -> or if interactive with a yes reply
          if( (defined($optNoInteractive) && defined($optBackupDir)) ||
              ( ! defined($optNoInteractive) &&
