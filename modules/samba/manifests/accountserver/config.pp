@@ -27,6 +27,7 @@ class samba::accountserver::config (
    $base_gid,
    $account_redirector,
    $accountsrv_dns,
+   $accountsrv_cron_time,
    $etc_path,
    $private_path,
    $base_dn,
@@ -82,6 +83,35 @@ class samba::accountserver::config (
                             's4studentclassadd','s4teacheradd','s4useradd','s4changepassword',
                             's4userdel','s4studentdel','s4teacherdel','s4usermove','s4studentmove',
                             's4classcheck','s4classdel','s4groupdel','s4sharedel','s4usermigrate']: }
+
+   # the migrate cache #
+   file { '/var/cache/accountserver':
+      ensure => directory;
+   }
+
+   file { '/var/cache/accountserver/users_waiting_migration.list':
+      ensure => file,
+      mode => '0644',
+      require => File['/var/cache/accountserver'],
+   }
+
+   # the migrate script #
+   file { '/usr/sbin/samba_user_migrate_service':
+      ensure => file,
+      source => "puppet:///modules/samba/samba_user_migrate_service",
+      mode => '0700',
+   }
+
+   # the migrate cron job #
+   cron { 'samba_accountserver_migrate:
+      command => '/usr/sbin/samba_user_migrate_service',
+      environment => 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      user => root,
+      minute => $accountsrv_cron_time[minute],
+      hour => $accountsrv_cron_time[hour],
+      require => File['/var/cache/accountserver/users_waiting_migration.list','/usr/sbin/samba_user_migrate_service'],
+   }
+
 
    ####################
    # base directories #

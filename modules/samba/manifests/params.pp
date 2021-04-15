@@ -12,6 +12,7 @@ class samba::params {
    $account_redirector = undef
    $rsync_sysvol = false
    $accountsrv_dns = 'sambaaccount'
+   $accountsrv_cron_time = { hour => '23', minute => '00' }
    $print_server = false
    $sysvolrsyncsrv_dns = 'sysvolrsync' 
    $sysvolrsync_password = 'us@se!sd$ac'

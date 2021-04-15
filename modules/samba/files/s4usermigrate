@@ -9,11 +9,13 @@ source /etc/samba/s4.conf
 function usage()
 {
     binName=$(basename $0)
-    echo "usage: $binName -n <user_name> <target_server>"
+    echo "usage: $binName [-n] [-l] <user_name> <target_server>"
     echo "   -n : non interractive"
+    echo "   -l : migrate later"
     exit 0
 }
 
+waitingFile='/var/cache/accountserver/users_waiting_migration.list'
 
 ###########
 #parse args
@@ -22,10 +24,13 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":hn" opt; do
+    while getopts ":hnl" opt; do
 	case $opt in
             n)
                 optNoInterractive='true'
+                ;;
+            l)
+                optLater='true'
                 ;;
 	    h)
 		usage
@@ -83,14 +88,14 @@ hostname=$(hostname)
 # check if the user exist #
 if ! userSearch=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" unixHomeDirectory); then
    echo "The user $userName does not exist !"
-   exit 0
+   exit 1
 fi
 
 
 ################
 # analyse time #
 ################
-if [ "$optNoInterractive" != "true" ]; then
+if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
 
    # get current time #
    currentTime=$(date +%H%M | sed 's/^0*//');
@@ -98,8 +103,11 @@ if [ "$optNoInterractive" != "true" ]; then
    # check time #
    # warning between 5:00 and 21:00 #
    if [ "$currentTime" -gt "500" ] && [ "$currentTime" -lt "2100" ]; then
+      echo "----------------------------------------------------------------"
       echo "WARNING : you are about to migrate the user $userName."
       echo "You need to be sure that the user is not currently logged !"
+      echo "You can use the -l option to migrate the user later by cron job."
+      echo "----------------------------------------------------------------"
       if [ $(ask_yes_or_no "Are you sure you want to continue ?") == "no" ]; then
          exit 0
       fi
@@ -117,7 +125,7 @@ sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
 
 if [ -z "$userDN" ] || [ -z "$sourceServer" ]; then
    echo "Cannot find user current server !"
-   exit 0
+   exit 1
 fi
 
 
@@ -142,20 +150,20 @@ else
    if [ "$?" -ne "0" ]; then
       echo "Cannot access to the source server $sourceServer !"
       echo "Please set a passwordless ssh connection with ssh-copy-id."
-      exit 0
+      exit 1
    fi
 
    # get directories #
    sourceServerHomePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
    if [ "$?" -ne "0" ] || [ -z "$sourceServerHomePath" ]; then
       echo "Cannot find source server home path !"
-      exit 0
+      exit 1
    fi
 
    sourceServerProfilePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
    if [ "$?" -ne "0" ] || [ -z "$sourceServerProfilePath" ]; then
       echo "Cannot find source server profile path !"
-      exit 0
+      exit 1
    fi
 fi
 
@@ -170,21 +178,49 @@ else
    if [ "$?" -ne "0" ]; then
       echo "Cannot access to the target server $targetServer !"
       echo "Please set a passwordless ssh connection with ssh-copy-id."
-      exit 0
+      exit 1
    fi
 
    # get directories #
    targetServerHomePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
    if [ "$?" -ne "0" ] || [ -z "$targetServerHomePath" ]; then
       echo "Cannot find target server home path !"
-      exit 0
+      exit 1
    fi
 
    targetServerProfilePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
    if [ "$?" -ne "0" ] || [ -z "$targetServerProfilePath" ]; then
       echo "Cannot find target server profile path !"
-      exit 0
+      exit 1
    fi
+fi
+
+
+#######################################
+# check if weed need to do this later #
+#######################################
+if [ "$optLater" == "true" ]; then
+
+   # ensure the operation is not already pending #
+   if waitingLine=$(grep "^ *$userName \+" "$waitingFile"); then
+
+      # get pending server #
+      waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+      # check if the same #
+      if [ "$waitingServer" == "$targetServer" ]; then
+         echo "The user $userName already waiting to be migrated to $targetServer."
+         exit 0
+      fi
+         echo "The user $userName previously set to be migrated to $waitingServer."
+         echo "Now it will be migrated to $targetServer."
+         sed -i "/$waitingLine/d" "$waitingFile"
+      fi
+   fi
+
+   # add to waiting list #
+   echo "$userName $targetServer" >> $waitingFile
+   exit 0
 fi
 
 
@@ -224,7 +260,7 @@ if [ "$?" -eq "0" ]; then
       userHomeMigrated='true'
    else
       echo "Error while migrating $userName home directory to $targetServer !"
-      exit 0
+      exit 1
    fi
 else
    echo "WARNING ! No home directory found while migrate $userName from $sourceServer"
@@ -267,7 +303,7 @@ if [ "$?" -eq "0" ]; then
       userProfileMigrated='true'
    else
       echo "Error while migrating $userName profile directory to $targetServer !"
-      exit 0
+      exit 1
    fi
 fi
 
@@ -292,7 +328,7 @@ if [ "$?" -eq '0' ]; then
    echo "User $userName migrated to $targetServer !"
 else
    echo "Error while updating user $userName account !"
-   exit 0
+   exit 1
 fi
 
 
