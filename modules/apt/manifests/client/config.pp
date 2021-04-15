@@ -36,10 +36,8 @@ class apt::client::config {
    $directs = $apt::client::directs
    $distribution = $apt::client::distribution
    $sources = $apt::client::sources
-   $sources_additional = $apt::client::sources_additional
    $pinnings = $apt::client::pinnings
    $rep_keys = $apt::client::rep_keys
-   $rep_keys_additional = $apt::client::rep_keys_additional
 
    ###############################
    # add the needed repositories #
@@ -63,8 +61,6 @@ class apt::client::config {
    # intall the apt keys #
    #######################
    apt::client::key{ $rep_keys: }
-   apt::client::key{ $rep_keys_additional: }
-   
 
    # check if apt proxy is used #
    if $proxy_host and $proxy_port {

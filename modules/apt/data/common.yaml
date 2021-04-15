@@ -1,0 +1,16 @@
+---
+lookup_options:
+   apt::directs:
+      merge: unique
+   apt::debian_reps:
+      merge: unique
+   apt::sources:
+      merge: hash
+   apt::pinnings:
+      merge: hash
+   apt::keys:
+      merge: unique
+   apt::autoupdates:
+      merge: unique
+   apt::autoupdate_blacklist:
+      merge: unique

@@ -5,7 +5,3 @@
 # <%= name %>
 deb <%= params[0] %> <%if params.length >= 3 %><%= params[2] %><% else %><%= @distribution %><% end %> <%= params[1] %>
 <% end -%>
-<% @sources_additional.each do |name,params| -%>
-# <%= name %>
-deb <%= params[0] %> <%if params.length >= 3 %><%= params[2] %><% else %><%= @distribution %><% end %> <%= params[1] %>
-<% end -%>

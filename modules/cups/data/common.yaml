@@ -1,0 +1,4 @@
+---
+lookup_options:
+   cups::printers:
+      merge: hash

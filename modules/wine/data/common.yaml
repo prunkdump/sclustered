@@ -1,0 +1,4 @@
+---
+lookup_options:
+   wine::apps:
+      merge: unique

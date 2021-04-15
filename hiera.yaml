@@ -1,10 +1,19 @@
 ---
-:backends:
-  - yaml
-:yaml:
-  :datadir: /etc/puppet/hieradata
-:hierarchy:
-  - "hostname/%{::hostname}"
-  - "hostnumber/%{::hostnumber}"
-  - "room/%{::room}"
-  - common
+version: 5
+defaults:
+   datadir: hieradata
+   data_hash: yaml_data
+
+hierarchy:
+   - name: "Per hostname"
+     path: "hostname/%{facts.hostname}.yaml"
+
+   - name: "Per host number"
+     path: "hostnumber/%{facts.hostnumber}.yaml"
+
+   - name: "Per room"
+     path: "room/%{facts.room}.yaml"
+
+   - name: "Common data"
+     path: "common.yaml"
+

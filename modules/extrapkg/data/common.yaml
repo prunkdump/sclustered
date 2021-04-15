@@ -1,0 +1,4 @@
+---
+lookup_options:
+   extrapkg::apps:
+      merge: unique

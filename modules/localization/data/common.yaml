@@ -1,0 +1,4 @@
+---
+lookup_options:
+   localization::generated_locales:
+      merge: unique

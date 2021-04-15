@@ -14,10 +14,8 @@ class apt::params {
       base => ['http://debian','main contrib non-free'],
       security => ['http://security.debian.org/debian-security','main','stable/updates'],
    }
-   $sources_additional = {}
    $pinnings = {}
    $keys = []
-   $keys_additional = []
    $autoupdates = []
    $autoupdate_blacklist = []
    $autoupdate_times = []

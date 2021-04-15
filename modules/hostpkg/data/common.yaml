@@ -1,0 +1,10 @@
+---
+lookup_options:
+   hostpkg::themes:
+      merge: hash
+   hostpkg::install_apps:
+      merge: unique
+   hostpkg::remove_apps:
+      merge: unique
+   hostpkg::install_themes:
+      merge: unique
