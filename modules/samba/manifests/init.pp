@@ -8,7 +8,7 @@ class samba (
    $account_redirector = $samba::params::account_redirector,
    $rsync_sysvol = $samba::params::rsync_sysvol,
    $accountsrv_dns = $samba::params::accountsrv_dns,
-   $accountsrv_cron_time = samba::params::accountsrv_cron_time,
+   $accountsrv_cron_time = $samba::params::accountsrv_cron_time,
    $print_server = $samba::params::print_server,
    $sysvolrsyncsrv_dns = $samba::params::sysvolrsyncsrv_dns,
    $sysvolrsync_password = $samba::params::sysvolrsync_password,

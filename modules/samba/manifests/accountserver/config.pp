@@ -103,12 +103,12 @@ class samba::accountserver::config (
    }
 
    # the migrate cron job #
-   cron { 'samba_accountserver_migrate:
+   cron { 'samba_accountserver_migrate':
       command => '/usr/sbin/samba_user_migrate_service',
-      environment => 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      environment => 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
       user => root,
-      minute => $accountsrv_cron_time[minute],
-      hour => $accountsrv_cron_time[hour],
+      hour => $accountsrv_cron_time['hour'],
+      minute => $accountsrv_cron_time['minute'],
       require => File['/var/cache/accountserver/users_waiting_migration.list','/usr/sbin/samba_user_migrate_service'],
    }
 
