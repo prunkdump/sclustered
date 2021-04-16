@@ -336,6 +336,7 @@ while read -r migrateUserInfo; do
    ########################
    # rsync home to target #
    ########################
+   userHomeMigrated=''
 
    # check if home exits #
    if [ "$sourceServerIsLocal" == 'true' ]; then
@@ -372,13 +373,14 @@ while read -r migrateUserInfo; do
          exit 1
       fi
    else
-      echo "WARNING ! No home directory found while migrate $userName from $sourceServer"
+      echo "WARNING ! No home directory found while migrating $userName from $sourceServer"
    fi
 
 
    ###########################
    # rsync profile to target #
    ###########################
+   userProfileMigrated=''
 
    # check if profile exits #
    if [ "$sourceServerIsLocal" == 'true' ]; then
