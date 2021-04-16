@@ -3,6 +3,7 @@ class cups::postconfig {
    $disable_lpupdate = $cups::disable_lpupdate
    $printers = $cups::printers
    $default_printer = $cups::default_printer
+   $default_printserver = $cups::default_printserver
 
    if $disable_lpupdate == false {
       ####################

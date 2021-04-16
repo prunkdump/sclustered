@@ -2,7 +2,8 @@ class cups (
    $disable_lpupdate = $cups::params::disable_lpupdate,
    $web_access = $cups::params::web_access,
    $printers = $cups::params::printers,
-   $default_printer = $cups::params::default_printer
+   $default_printer = $cups::params::default_printer,
+   $default_printserver = $cups::params::default_printserver
 ) inherits cups::params {
 
    anchor { 'cups::begin': } ->

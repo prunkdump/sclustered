@@ -6,5 +6,5 @@ class cups::params {
    $web_access = $::network::starform
    $printers = {}
    $default_printer = undef
-
+   $default_printserver = undef
 }
