@@ -10,6 +10,7 @@ function usage()
 {
     binName=$(basename $0)
     echo "usage: $binName [-n] [-l] <user_name> <target_server>"
+    echo "       $binName [-n] [-l] -c <users_class> <target_server>"
     echo "   -n : non interractive"
     echo "   -l : migrate later"
     exit 0
@@ -24,13 +25,16 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":hnl" opt; do
+    while getopts ":hnlc" opt; do
 	case $opt in
             n)
                 optNoInterractive='true'
                 ;;
             l)
                 optLater='true'
+                ;;
+            c)
+                optBaseClass='true'
                 ;;
 	    h)
 		usage
@@ -79,22 +83,78 @@ if [ $# -ne 2 ]; then
     usage
 fi
 
-# parse username #
-userName=$1
-targetServer=$2
-targetServer=$(echo "$targetServer" | cut -d. -f1)
-hostname=$(hostname)
 
-# check if the user exist #
-if ! userSearch=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$userName)" unixHomeDirectory); then
-   echo "The user $userName does not exist !"
-   exit 1
+############################################
+# check the users than need to be migrated #
+############################################
+migrateUsers=''
+
+# if base class is given get all users inside #
+if [ "$optBaseClass" == "true" ]; then
+
+   baseClass="$1"
+
+   # check the class #
+   if ! baseClassInfo=$(s4classcheck $baseClass); then
+      echo "The class $baseClass cannot be found !"
+      exit 1
+   else
+      baseClassDN=$(echo "$baseClassInfo" | grep 'Class DN: ')
+      baseClassDN=${baseClassDN#Class DN: }
+   fi
+
+   # get all the users #
+   migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory)
+
+   # check if we have users #
+   if [ -z "$migrateUsers" ]; then
+      echo "No users in class $baseClass."
+      exit 0
+   fi
+
+   # display the result #
+   echo "--------------------------------------------------"
+   echo "The following users will be migrated to $2 : "
+   echo "--------------------------------------------------"
+   while read -r migrateUserInfo; do
+
+      # get the user class #
+      migrateUserClass=$(echo "$migrateUserInfo" | cut -f1)
+      migrateUserClass=$(echo "$migrateUserClass" | cut -d ',' -f2)
+      migrateUserClass=${migrateUserClass#OU=}
+
+      # get the user name #
+      migrateUserName=$(echo "$migrateUserInfo" | cut -f2)
+
+      # display #
+      echo "User $migrateUserName from class $migrateUserClass"
+
+   done <<< "$migrateUsers"
+   echo "--------------------------------------------------"
+
+   # if needed ask to continue #
+   if [ "$optNoInterractive" != "true" ]; then
+      if [ $(ask_yes_or_no "Do you want to continue ?") == "no" ]; then
+         exit 0
+      fi
+   fi
+
+# if no class is given just one user to migrate #
+else
+
+   migrateUserName="$1"
+
+   # check if the user exist #
+   if ! migrateUsers=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$migrateUserName)" cn unixHomeDirectory); then
+      echo "The user $migrateUserName does not exist !"
+      exit 1
+   fi
 fi
 
 
-################
-# analyse time #
-################
+##############
+# check time #
+##############
 if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
 
    # get current time #
@@ -104,8 +164,8 @@ if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
    # warning between 5:00 and 21:00 #
    if [ "$currentTime" -gt "500" ] && [ "$currentTime" -lt "2100" ]; then
       echo "----------------------------------------------------------------"
-      echo "WARNING : you are about to migrate the user $userName."
-      echo "You need to be sure that the user is not currently logged !"
+      echo "WARNING : you are about to migrate users !"
+      echo "You need to be sure that the users are not currently logged !"
       echo "You can use the -l option to migrate the user later by cron job."
       echo "----------------------------------------------------------------"
       if [ $(ask_yes_or_no "Are you sure you want to continue ?") == "no" ]; then
@@ -115,204 +175,252 @@ if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
 fi
 
 
+##################################
+# get target server and hostname #
+##################################
+targetServer="$2"
+targetServer=$(echo "$targetServer" | cut -d. -f1)
+hostname=$(hostname)
+
+
 #####################
-# check user server #
+# check all servers #
 #####################
-userDN=$(echo "$userSearch" | cut -f1)
-sourceServer=$(echo "$userSearch" | cut -f2)
-sourceServer=${sourceServer#/dnfs/$homeShare/}
-sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
 
-if [ -z "$userDN" ] || [ -z "$sourceServer" ]; then
-   echo "Cannot find user current server !"
-   exit 1
-fi
+# store checked servers #
+migrationServers=''
 
+# add : name,local=true/false,homePath,profilePath #
+# to migrationServers                              #
+function checkServer() {
 
-#################
-# check servers #
-#################
+   serverName="$1"
 
-# check targetServer #
-if [ "$targetServer" == "$sourceServer" ]; then
-   echo "The user $userName is already stored on $sourceServer"
-   exit 0
-fi
+   # ensure domain is removed #
+   serverName=$(echo "$serverName" | cut -d. -f1)
 
-# check if source is local #
-if [ "$sourceServer" == "$hostname" ]; then
-   sourceServerIsLocal='true'
-   sourceServerHomePath="$unixHomePath"
-   sourceServerProfilePath="$unixProfilePath"
-else
-   # check access to the source server #
-   ssh $sourceServer -oBatchMode=yes 'echo hello' > /dev/null
-   if [ "$?" -ne "0" ]; then
-      echo "Cannot access to the source server $sourceServer !"
-      echo "Please set a passwordless ssh connection with ssh-copy-id."
-      exit 1
+   # check if the server is already checked #
+   if echo -e "$migrationServers" | grep -q "^$serverName\t"; then
+      return
    fi
 
-   # get directories #
-   sourceServerHomePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
-   if [ "$?" -ne "0" ] || [ -z "$sourceServerHomePath" ]; then
-      echo "Cannot find source server home path !"
-      exit 1
-   fi
+   # check if local #
+   if [ "$sourceServer" == "$hostname" ]; then
+      serverIsLocal='true'
+      serverHomePath="$unixHomePath"
+      serverProfilePath="$unixProfilePath"
+   else
+      serverIsLocal='false'
 
-   sourceServerProfilePath=$(ssh $sourceServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
-   if [ "$?" -ne "0" ] || [ -z "$sourceServerProfilePath" ]; then
-      echo "Cannot find source server profile path !"
-      exit 1
-   fi
-fi
-
-# check if target is local #
-if [ "$targetServer" == "$hostname" ]; then
-   targetServerIsLocal='true'
-   targetServerHomePath="$unixHomePath"
-   targetServerProfilePath="$unixProfilePath"
-else
-   # check access to the target server #
-   ssh $targetServer -oBatchMode=yes 'echo hello' > /dev/null
-   if [ "$?" -ne "0" ]; then
-      echo "Cannot access to the target server $targetServer !"
-      echo "Please set a passwordless ssh connection with ssh-copy-id."
-      exit 1
-   fi
-
-   # get directories #
-   targetServerHomePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
-   if [ "$?" -ne "0" ] || [ -z "$targetServerHomePath" ]; then
-      echo "Cannot find target server home path !"
-      exit 1
-   fi
-
-   targetServerProfilePath=$(ssh $targetServer -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
-   if [ "$?" -ne "0" ] || [ -z "$targetServerProfilePath" ]; then
-      echo "Cannot find target server profile path !"
-      exit 1
-   fi
-fi
-
-
-#######################################
-# check if weed need to do this later #
-#######################################
-if [ "$optLater" == "true" ]; then
-
-   # ensure the operation is not already pending #
-   if waitingLine=$(grep "^ *$userName \+" "$waitingFile"); then
-
-      # get pending server #
-      waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
-
-      # check if the same #
-      if [ "$waitingServer" == "$targetServer" ]; then
-         echo "The user $userName already waiting to be migrated to $targetServer."
-         exit 0
+      # check access to the server #
+      ssh $serverName -oBatchMode=yes 'echo hello' > /dev/null
+      if [ "$?" -ne "0" ]; then
+         echo "Cannot access to the server $serverName !"
+         echo "Please set a passwordless ssh connection with ssh-copy-id."
+         exit 1
       fi
-         echo "The user $userName previously set to be migrated to $waitingServer."
-         echo "Now it will be migrated to $targetServer."
-         sed -i "/$waitingLine/d" "$waitingFile"
+
+      # get directories #
+      serverHomePath=$(ssh $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
+      if [ "$?" -ne "0" ] || [ -z "$serverHomePath" ]; then
+         echo "Cannot find server $serverName home path !"
+         exit 1
+      fi
+
+      serverProfilePath=$(ssh $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
+      if [ "$?" -ne "0" ] || [ -z "$serverProfilePath" ]; then
+         echo "Cannot find server $serverName profile path !"
+         exit 1
+      fi
+
+      # save #
+      if [ ! -z "$migrationServers" ]; then
+         migrationServers="$migrationServers\n"
+      fi
+      migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath"
+
+   fi
+}
+
+# check target server #
+checkServer "$targetServer"
+
+# check all source servers #
+while read -r migrateUserInfo; do
+
+   # get source server #
+   userDN=$(echo "$migrateUserInfo" | cut -f1)
+   userName=$(echo "$migrateUserInfo" | cut -f2)
+   sourceServer=$(echo "$migrateUserInfo" | cut -f3)
+   sourceServer=${sourceServer#/dnfs/$homeShare/}
+   sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
+
+   if [ -z "$userDN" ] || [ -z "$sourceServer" ]; then
+      echo "Cannot find user $userName current server !"
+      exit 1
+   fi
+
+   # check source server #
+   checkServer "$sourceServer"
+
+done <<< "$migrateUsers";
+
+
+#--------------------------#
+#                          #
+#        MIGRATE           #
+#                          #
+#--------------------------#
+
+# get target server info #
+targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer\t")
+
+targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
+targetServerHomePath=$(echo "$targetServerInfo" | cut -f3)
+targetServerProfilePath=$(echo "$targetServerInfo" | cut -f4)
+
+
+#####################
+# migrate all users #
+#####################
+while read -r migrateUserInfo; do
+
+   # get user info #
+   userDN=$(echo "$migrateUserInfo" | cut -f1)
+   userName=$(echo "$migrateUserInfo" | cut -f2)
+   sourceServer=$(echo "$migrateUserInfo" | cut -f3)
+   sourceServer=${sourceServer#/dnfs/$homeShare/}
+   sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
+
+   # check if we need to migrate #
+   if [ "$targetServer" == "$sourceServer" ]; then
+      echo "The user $userName is already stored on $targetServer"
+      continue
+   fi
+
+   # get source server info #
+   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer\t")
+
+   sourceServerIsLocal=$(echo "$sourceServerInfo" | cut -f2)
+   sourceServerHomePath=$(echo "$sourceServerInfo" | cut -f3)
+   sourceServerProfilePath=$(echo "$sourceServerInfo" | cut -f4)
+
+
+   #####################################
+   # check if we need to do this later #
+   #####################################
+   if [ "$optLater" == "true" ]; then
+
+      # ensure the operation is not already pending #
+      if waitingLine=$(grep "^ *$userName \+" "$waitingFile"); then
+
+         # get pending server #
+         waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+         # check if the same #
+         if [ "$waitingServer" == "$targetServer" ]; then
+            echo "The user $userName already waiting to be migrated to $targetServer."
+            continue
+         fi
+            echo "The user $userName previously set to be migrated to $waitingServer."
+            echo "Now it will be migrated to $targetServer."
+            sed -i "/$waitingLine/d" "$waitingFile"
+         fi
+      fi
+
+      # add to waiting list #
+      echo "$userName $targetServer" >> $waitingFile
+      continue
+   fi
+
+   ########################
+   # rsync home to target #
+   ########################
+
+   # check if home exits #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      test -e "$sourceServerHomePath/$userName"
+   else
+      ssh $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
+   fi
+
+   # rsync home if exist #
+   if [ "$?" -eq "0" ]; then
+
+      # build source #
+      if [ "$sourceServerIsLocal" == 'true' ]; then
+         rsyncSource="$sourceServerHomePath/$userName"
+      else
+         rsyncSource="$sourceServer:/$sourceServerHomePath/$userName"
+      fi
+
+      # build dest #
+      if [ "$targetServerIsLocal" == 'true' ]; then
+         rsyncDest="$targetServerHomePath/"
+      else
+         rsyncDest="$targetServer:/$targetServerHomePath/"
+      fi
+
+      # rsync #
+      echo "Migrating $userName home directory to $targetServer..."
+      rsync -XAaz --delete-after $rsyncSource $rsyncDest
+      if [ "$?" -eq '0' ]; then
+         echo "User $userName home directory migrated to $targetServer."
+         userHomeMigrated='true'
+      else
+         echo "Error while migrating $userName home directory to $targetServer !"
+         exit 1
+      fi
+   else
+      echo "WARNING ! No home directory found while migrate $userName from $sourceServer"
+   fi
+
+
+   ###########################
+   # rsync profile to target #
+   ###########################
+
+   # check if profile exits #
+   if [ "$sourceServerIsLocal" == 'true' ]; then
+      test -e "$sourceServerProfilePath/$userName"
+   else
+      ssh $sourceServer -oBatchMode=yes "test -e $sourceServerProfilePath/$userName"
+   fi
+
+   # rsync profile #
+   if [ "$?" -eq "0" ]; then
+
+      # build source #
+      if [ "$sourceServerIsLocal" == 'true' ]; then
+         rsyncSource="$sourceServerProfilePath/$userName"
+      else
+         rsyncSource="$sourceServer:/$sourceServerProfilePath/$userName"
+      fi
+
+      # build dest #
+      if [ "$targetServerIsLocal" == 'true' ]; then
+         rsyncDest="$targetServerProfilePath/"
+      else
+         rsyncDest="$targetServer:/$targetServerProfilePath/"
+      fi
+
+      # rsync #
+      echo "Migrating $userName profile directory to $targetServer..."
+      rsync -XAaz --delete-after $rsyncSource $rsyncDest
+      if [ "$?" -eq '0' ]; then
+         echo "User $userName profile directory migrated to $targetServer."
+         userProfileMigrated='true'
+      else
+         echo "Error while migrating $userName profile directory to $targetServer !"
+         exit 1
       fi
    fi
 
-   # add to waiting list #
-   echo "$userName $targetServer" >> $waitingFile
-   exit 0
-fi
+   ##################
+   # update account #
+   ##################
 
-
-########################
-# rsync home to target #
-########################
-
-# check if home exits #
-if [ "$sourceServerIsLocal" == 'true' ]; then
-   test -e "$sourceServerHomePath/$userName"
-else
-   ssh $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
-fi
-
-# rsync home if exist #
-if [ "$?" -eq "0" ]; then
-
-   # build source #
-   if [ "$sourceServerIsLocal" == 'true' ]; then
-      rsyncSource="$sourceServerHomePath/$userName"
-   else
-      rsyncSource="$sourceServer:/$sourceServerHomePath/$userName"
-   fi
-
-   # build dest #
-   if [ "$targetServerIsLocal" == 'true' ]; then
-      rsyncDest="$targetServerHomePath/"
-   else
-      rsyncDest="$targetServer:/$targetServerHomePath/"
-   fi
-
-   # rsync #
-   echo "Migrating $userName home directory to $targetServer..."
-   rsync -XAaz --delete-after $rsyncSource $rsyncDest
-   if [ "$?" -eq '0' ]; then
-      echo "User $userName home directory migrated to $targetServer."
-      userHomeMigrated='true'
-   else
-      echo "Error while migrating $userName home directory to $targetServer !"
-      exit 1
-   fi
-else
-   echo "WARNING ! No home directory found while migrate $userName from $sourceServer"
-fi
-
-
-###########################
-# rsync profile to target #
-###########################
-
-# check if profile exits #
-if [ "$sourceServerIsLocal" == 'true' ]; then
-   test -e "$sourceServerProfilePath/$userName"
-else
-   ssh $sourceServer -oBatchMode=yes "test -e $sourceServerProfilePath/$userName"
-fi
-
-# rsync profile #
-if [ "$?" -eq "0" ]; then
-
-   # build source #
-   if [ "$sourceServerIsLocal" == 'true' ]; then
-      rsyncSource="$sourceServerProfilePath/$userName"
-   else
-      rsyncSource="$sourceServer:/$sourceServerProfilePath/$userName"
-   fi
-
-   # build dest #
-   if [ "$targetServerIsLocal" == 'true' ]; then
-      rsyncDest="$targetServerProfilePath/"
-   else
-      rsyncDest="$targetServer:/$targetServerProfilePath/"
-   fi
-
-   # rsync #
-   echo "Migrating $userName profile directory to $targetServer..."
-   rsync -XAaz --delete-after $rsyncSource $rsyncDest
-   if [ "$?" -eq '0' ]; then
-      echo "User $userName profile directory migrated to $targetServer."
-      userProfileMigrated='true'
-   else
-      echo "Error while migrating $userName profile directory to $targetServer !"
-      exit 1
-   fi
-fi
-
-
-##################
-# update account #
-##################
-
-echo "dn: $userDN
+   echo "dn: $userDN
 changetype: modify
 replace: homeDirectory
 homeDirectory: \\\\${targetServer}\\${homeShare}\\${userName}
@@ -321,41 +429,43 @@ profilePath: \\\\${targetServer}\\${profileShare}\\${userName}
 replace: unixHomeDirectory
 unixHomeDirectory: /dnfs/${homeShare}/${targetServer}/$userName" > /tmp/$userName
 
-ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
-rm /tmp/$userName
+   ldbmodify --url=$samDatabase -b $baseDN /tmp/$userName
+   rm /tmp/$userName
 
-if [ "$?" -eq '0' ]; then
-   echo "User $userName migrated to $targetServer !"
-else
-   echo "Error while updating user $userName account !"
-   exit 1
-fi
-
-
-################
-# clean source #
-################
-
-# clean home #
-if [ "$userHomeMigrated" == 'true' ]; then
-
-   # remove source #
-   if [ "$sourceServerIsLocal" == 'true' ]; then
-      rm -rf "$sourceServerHomePath/$userName"
+   if [ "$?" -eq '0' ]; then
+      echo "User $userName migrated to $targetServer !"
    else
-      ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerHomePath/$userName"
+      echo "Error while updating user $userName account !"
+      exit 1
    fi
-fi
 
-# clean profile #
-if [ "$userProfileMigrated" == 'true' ]; then
 
-   # remove source #
-   if [ "$sourceServerIsLocal" == 'true' ]; then
-      rm -rf "$sourceServerProfilePath/$userName"
-   else
-      ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerProfilePath/$userName"
+   ################
+   # clean source #
+   ################
+
+   # clean home #
+   if [ "$userHomeMigrated" == 'true' ]; then
+
+      # remove source #
+      if [ "$sourceServerIsLocal" == 'true' ]; then
+         rm -rf "$sourceServerHomePath/$userName"
+      else
+         ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerHomePath/$userName"
+      fi
    fi
-fi
+
+   # clean profile #
+   if [ "$userProfileMigrated" == 'true' ]; then
+
+      # remove source #
+      if [ "$sourceServerIsLocal" == 'true' ]; then
+         rm -rf "$sourceServerProfilePath/$userName"
+      else
+         ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerProfilePath/$userName"
+      fi
+   fi
 
 # done ! #
+# next user #
+done <<< "$migrateUsers";
