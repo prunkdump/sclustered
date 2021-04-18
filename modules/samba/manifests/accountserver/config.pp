@@ -104,7 +104,7 @@ class samba::accountserver::config (
    # the migrate script #
    file { '/usr/sbin/samba_accountserver_migrate_service':
       ensure => file,
-      source => "puppet:///modules/samba/samba_user_migrate_service",
+      source => "puppet:///modules/samba/samba_accountserver_migrate_service",
       mode => '0700',
    }
 
@@ -117,7 +117,7 @@ class samba::accountserver::config (
       minute => $accountsrv_cron_time['minute'],
       require => File['/var/cache/accountserver/users_waiting_migration.list',
                       '/var/cache/accountserver/shares_waiting_migration.list',
-                      '/usr/sbin/samba_user_migrate_service'],
+                      '/usr/sbin/samba_accountserver_migrate_service'],
    }
 
 
