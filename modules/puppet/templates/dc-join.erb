@@ -56,6 +56,21 @@ ssh $target -oBatchMode=yes 'echo hello' > /dev/null
 if [ "$?" -ne "0" ]; then
    echo 'Cannot access to the target host !'
    echo 'Please set a passwordless ssh connection with ssh-copy-id.'
+   echo ' '
+   echo "-------------- here how to do this --------------------"
+   echo "-> Copy the root ID to one remote local user"
+   echo "ssh-copy-id yourlocaluser@$1"
+   echo " "
+   echo "-> On the remote machine copy the keys to the root user"
+   echo "   Don't forget to chmod 0600 the file !"
+   echo "ssh yourlocaluser@$1"
+   echo "su -"
+   echo "mkdir -p /root/.ssh"
+   echo "cat /home/yourlocaluser/.ssh/authorized_keys >> /root/.ssh/authorized_keys"
+   echo "chmod 0600 /root/.ssh/authorized_keys"
+   echo "exit"
+   echo "exit"
+   echo "-------------------------------------------------------"
    exit 0
 fi
 
@@ -165,6 +180,20 @@ if [ "$?" -ne "0" ] || [ -z "$targetInterfaces" ]; then
    echo " "
    exit 0
 fi
+
+# get remote interfaces #
+remoteInterfaces=$(ssh $target -oBatchMode=yes 'ip link show')
+
+# check interfaces #
+while read -r interfaceLine; do
+   currentInterface=$(echo $interfaceLine | sed 's/^ *- *//')
+   if ! $(echo "$remoteInterfaces" | grep -q "^[[:digit:]]\+: *$currentInterface:"); then
+      echo "Interface $currentInterface not found on the target host !"
+      echo "Please check the host hiera configuration :"
+      echo "/etc/puppet/hieradata/hostname/$hostname.yaml"
+      exit 0
+   fi
+done <<<"$targetInterfaces"
 
 
 # check node #
@@ -427,8 +456,10 @@ ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nserver = $masterdns/' /etc/puppe
 
 # done #
 echo " "
+echo "------------------------------------------------"
 echo "OK !"
 echo "You can now run 'puppet agent -t' on the"
 echo "new DC ${hostname}."
 echo "Don't forget to run after 's4makeshareddirs' on"
 echo "all the account servers."
+echo "------------------------------------------------"
