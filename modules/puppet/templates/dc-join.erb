@@ -184,16 +184,57 @@ fi
 # get remote interfaces #
 remoteInterfaces=$(ssh $target -oBatchMode=yes 'ip link show')
 
-# check interfaces #
+# check target interfaces #
 while read -r interfaceLine; do
-   currentInterface=$(echo $interfaceLine | sed 's/^ *- *//')
+   currentInterface=$(echo $interfaceLine | sed 's/^\s*-\s*//')
+
+   # check if interface exist #
    if ! $(echo "$remoteInterfaces" | grep -q "^[[:digit:]]\+: *$currentInterface:"); then
       echo "Interface $currentInterface not found on the target host !"
       echo "Please check the host hiera configuration :"
       echo "/etc/puppet/hieradata/hostname/$hostname.yaml"
       exit 0
    fi
+
+   # check if interface have fixed address #
+   if ! $(ssh $target -oBatchMode=yes 'find /etc/network/interfaces /etc/network/interfaces.d -type f -exec cat {} +' | grep -q "^[[:space:]]*iface[[:space:]]\+$currentInterface[[:space:]]\+inet[[:space:]]\+static"); then
+
+      # get example address #
+      baseHostInterfaces=$(puppet lookup samba::interfaces 2> /dev/null | sed '/^\s*-\s*lo\s*$/d' | grep '^[[:space:]]*-[[:space:]]')
+      baseHostInterface=$(echo "$baseHostInterfaces" | head -n 1| sed 's/^\s*-\s*//')
+      baseHostAddress=$(ip addr | grep -A3 "$baseHostInterface" | grep "[[:space:]]*inet[[:space:]]\+" | tr -s ' ' | cut -d ' ' -f3)
+      baseHostIP=$(echo "$baseHostAddress" | cut -d '/' -f1)
+      baseHostNetmask=$(echo "$baseHostAddress" | cut -d '/' -f2)
+      baseHostIPMainPart=$(echo "$baseHostIP" | cut -d '.' -f-1,2,3)
+      baseHostIPLastPart=$(echo "$baseHostIP" | cut -d '.' -f4)
+      baseHostIPLastPart=$((baseHostIPLastPart + 1))
+      baseHostGateway=$(ip route | grep 'default via' | cut -d' ' -f3)
+
+      echo "Interface $currentInterface seems not have a fixed address on the target host !"
+      echo "Please add something like this in /etc/network/interfaces :"
+      echo "iface $currentInterface inet static"
+      echo "        address $baseHostIPMainPart.$baseHostIPLastPart/$baseHostNetmask"
+      echo "        gateway $baseHostGateway"
+      echo "        dns-nameservers $baseHostIP"
+      echo "        dns-search $domain"
+      exit 0
+   fi
+
 done <<<"$targetInterfaces"
+
+# check if one fixed address was added to /etc/hosts #
+if ! targetHostLine=$(ssh $target -oBatchMode=yes 'cat /etc/hosts' | grep "$hostFqdn"); then
+   echo "No $hostFqdn entry found in /etc/hosts on the target host !"
+   echo "Please add a fixed address entry for the $hostFqdn host."
+   exit 0
+fi
+
+# check if no local ip address is used #
+if echo "$targetHostLine" | grep -q '127\.0\.[[:digit:]]*\.[[:digit:]]*'; then
+   echo "$hostFqdn entry found in /etc/hosts on the target host does not match the fixed IP address !"
+   echo "Please set the entry to to host fixed address."
+   exit 0
+fi
 
 
 # check node #
