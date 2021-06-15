@@ -200,12 +200,12 @@ function checkServer() {
    serverName=$(echo "$serverName" | cut -d. -f1)
 
    # check if the server is already checked #
-   if echo -e "$migrationServers" | grep -q "^$serverName\t"; then
+   if echo -e "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
       return
    fi
 
    # check if local #
-   if [ "$sourceServer" == "$hostname" ]; then
+   if [ "$serverName" == "$hostname" ]; then
       serverIsLocal='true'
       serverHomePath="$unixHomePath"
       serverProfilePath="$unixProfilePath"
@@ -213,7 +213,7 @@ function checkServer() {
       serverIsLocal='false'
 
       # check access to the server #
-      ssh $serverName -oBatchMode=yes 'echo hello' > /dev/null
+      ssh -n $serverName -oBatchMode=yes 'echo hello' > /dev/null
       if [ "$?" -ne "0" ]; then
          echo "Cannot access to the server $serverName !"
          echo "Please set a passwordless ssh connection with ssh-copy-id."
@@ -221,25 +221,24 @@ function checkServer() {
       fi
 
       # get directories #
-      serverHomePath=$(ssh $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
+      serverHomePath=$(ssh -n $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixHomePath')
       if [ "$?" -ne "0" ] || [ -z "$serverHomePath" ]; then
          echo "Cannot find server $serverName home path !"
          exit 1
       fi
 
-      serverProfilePath=$(ssh $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
+      serverProfilePath=$(ssh -n $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixProfilePath')
       if [ "$?" -ne "0" ] || [ -z "$serverProfilePath" ]; then
          echo "Cannot find server $serverName profile path !"
          exit 1
       fi
-
-      # save #
-      if [ ! -z "$migrationServers" ]; then
-         migrationServers="$migrationServers\n"
-      fi
-      migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath"
-
    fi
+
+   # save #
+   if [ ! -z "$migrationServers" ]; then
+      migrationServers="$migrationServers\n"
+   fi
+   migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath"
 }
 
 # check target server #
@@ -273,11 +272,21 @@ done <<< "$migrateUsers";
 #--------------------------#
 
 # get target server info #
-targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer\t")
+targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer[[:space:]]")
+if [ "$?" -ne "0" ]; then
+   echo "Failed to get target server $targetServer information !"
+   exit 1
+fi
 
 targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
 targetServerHomePath=$(echo "$targetServerInfo" | cut -f3)
 targetServerProfilePath=$(echo "$targetServerInfo" | cut -f4)
+
+# sanitary check #
+if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerHomePath" ] || [ -z "$targetServerProfilePath" ]; then
+   echo "Failed to get target server $targetServer information !"
+   exit 1
+fi
 
 
 #####################
@@ -295,15 +304,41 @@ while read -r migrateUserInfo; do
    # check if we need to migrate #
    if [ "$targetServer" == "$sourceServer" ]; then
       echo "The user $userName is already stored on $targetServer"
+
+      # remove if pending #
+      if waitingLine=$(grep "^ *$userName \+" "$waitingFile"); then
+
+         # get pending server #
+         waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+         # signal removing #
+         echo "The user $userName previously set to be migrated to $waitingServer."
+         echo "This is now disabled and the user will stay on $targetServer."
+
+         # remove #
+         sed -i "/^\s*$userName\s/d" "$waitingFile"
+      fi
+
+      # next user #
       continue
    fi
 
    # get source server info #
-   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer\t")
+   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer[[:space:]]")
+   if [ "$?" -ne "0" ]; then
+      echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
 
    sourceServerIsLocal=$(echo "$sourceServerInfo" | cut -f2)
    sourceServerHomePath=$(echo "$sourceServerInfo" | cut -f3)
    sourceServerProfilePath=$(echo "$sourceServerInfo" | cut -f4)
+
+   # sanitary check #
+   if [ -z "$sourceServerIsLocal" ] || [ -z "$sourceServerHomePath" ] || [ -z "$sourceServerProfilePath" ]; then
+      echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
 
 
    #####################################
@@ -321,7 +356,7 @@ while read -r migrateUserInfo; do
          if [ "$waitingServer" == "$targetServer" ]; then
             echo "The user $userName already waiting to be migrated to $targetServer."
             continue
-         fi
+         else
             echo "The user $userName previously set to be migrated to $waitingServer."
             echo "Now it will be migrated to $targetServer."
             sed -i "/$waitingLine/d" "$waitingFile"
@@ -333,6 +368,23 @@ while read -r migrateUserInfo; do
       continue
    fi
 
+
+   ####################
+   # check if pending #
+   ####################
+   if waitingLine=$(grep "^ *$userName \+" "$waitingFile"); then
+
+      # get pending server #
+      waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+       # signal if server changed #
+       if [ "$waitingServer" != "$targetServer" ]; then
+          echo "The user $userName previously waiting to be migrated to $waitingServer."
+          echo "We are now migrating the user to $targetServer."
+       fi
+   fi
+
+
    ########################
    # rsync home to target #
    ########################
@@ -342,7 +394,7 @@ while read -r migrateUserInfo; do
    if [ "$sourceServerIsLocal" == 'true' ]; then
       test -e "$sourceServerHomePath/$userName"
    else
-      ssh $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
+      ssh -n $sourceServer -oBatchMode=yes "test -e $sourceServerHomePath/$userName"
    fi
 
    # rsync home if exist #
@@ -386,7 +438,7 @@ while read -r migrateUserInfo; do
    if [ "$sourceServerIsLocal" == 'true' ]; then
       test -e "$sourceServerProfilePath/$userName"
    else
-      ssh $sourceServer -oBatchMode=yes "test -e $sourceServerProfilePath/$userName"
+      ssh -n $sourceServer -oBatchMode=yes "test -e $sourceServerProfilePath/$userName"
    fi
 
    # rsync profile #
@@ -453,7 +505,7 @@ unixHomeDirectory: /dnfs/${homeShare}/${targetServer}/$userName" > /tmp/$userNam
       if [ "$sourceServerIsLocal" == 'true' ]; then
          rm -rf "$sourceServerHomePath/$userName"
       else
-         ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerHomePath/$userName"
+         ssh -n $sourceServer -oBatchMode=yes "rm -rf $sourceServerHomePath/$userName"
       fi
    fi
 
@@ -464,10 +516,16 @@ unixHomeDirectory: /dnfs/${homeShare}/${targetServer}/$userName" > /tmp/$userNam
       if [ "$sourceServerIsLocal" == 'true' ]; then
          rm -rf "$sourceServerProfilePath/$userName"
       else
-         ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerProfilePath/$userName"
+         ssh -n $sourceServer -oBatchMode=yes "rm -rf $sourceServerProfilePath/$userName"
       fi
    fi
 
-# done ! #
-# next user #
+   #######################
+   # remove from pending #
+   #######################
+   sed -i "/^\s*$userName\s/d" "$waitingFile"
+
+   # done ! #
+   # next user #
+
 done <<< "$migrateUsers";

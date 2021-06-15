@@ -200,19 +200,19 @@ function checkServer() {
    serverName=$(echo "$serverName" | cut -d. -f1)
 
    # check if the server is already checked #
-   if echo -e "$migrationServers" | grep -q "^$serverName\t"; then
+   if echo -e "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
       return
    fi
 
    # check if local #
-   if [ "$sourceServer" == "$hostname" ]; then
+   if [ "$serverName" == "$hostname" ]; then
       serverIsLocal='true'
       serverSharePath="$unixSharePath"
    else
       serverIsLocal='false'
 
       # check access to the server #
-      ssh $serverName -oBatchMode=yes 'echo hello' > /dev/null
+      ssh -n $serverName -oBatchMode=yes 'echo hello' > /dev/null
       if [ "$?" -ne "0" ]; then
          echo "Cannot access to the server $serverName !"
          echo "Please set a passwordless ssh connection with ssh-copy-id."
@@ -220,19 +220,18 @@ function checkServer() {
       fi
 
       # get share path #
-      serverSharePath=$(ssh $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixSharePath')
+      serverSharePath=$(ssh -n $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixSharePath')
       if [ "$?" -ne "0" ] || [ -z "$serverSharePath" ]; then
          echo "Cannot find server $serverName share path !"
          exit 1
       fi
-
-      # save #
-      if [ ! -z "$migrationServers" ]; then
-         migrationServers="$migrationServers\n"
-      fi
-      migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverSharePath"
-
    fi
+
+   # save #
+   if [ ! -z "$migrationServers" ]; then
+      migrationServers="$migrationServers\n"
+   fi
+   migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverSharePath"
 }
 
 # check target server #
@@ -264,10 +263,20 @@ done <<< "$migrateShares";
 #--------------------------#
 
 # get target server info #
-targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer\t")
+targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer[[:space:]]")
+if [ "$?" -ne "0" ]; then
+   echo "Failed to get target server $targetServer information !"
+   exit 1
+fi
 
 targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
 targetServerSharePath=$(echo "$targetServerInfo" | cut -f3)
+
+# sanitary check #
+if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerSharePath" ]; then
+   echo "Failed to get target server $targetServer information !"
+   exit 1
+fi
 
 
 ######################
@@ -283,14 +292,40 @@ while read -r migrateShareInfo; do
    # check if we need to migrate #
    if [ "$targetServer" == "$sourceServer" ]; then
       echo "The share $shareName is already stored on $targetServer"
+
+      # remove if pending #
+      if waitingLine=$(grep "^ *$shareName \+" "$waitingFile"); then
+
+         # get pending server #
+         waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+         # signal removing #
+         echo "The share $shareName previously set to be migrated to $waitingServer."
+         echo "This is now disabled and the share will stay on $targetServer."
+
+         # remove #
+         sed -i "/^\s*$shareName\s/d" "$waitingFile"
+      fi
+
+      # next share #
       continue
    fi
 
    # get source server info #
-   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer\t")
+   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer[[:space:]]")
+   if [ "$?" -ne "0" ]; then
+      echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
 
    sourceServerIsLocal=$(echo "$sourceServerInfo" | cut -f2)
    sourceServerSharePath=$(echo "$sourceServerInfo" | cut -f3)
+
+   # sanitary check #
+   if [ -z "$sourceServerIsLocal" ] || [ -z "$sourceServerSharePath" ]; then
+      echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
 
 
    #####################################
@@ -308,7 +343,7 @@ while read -r migrateShareInfo; do
          if [ "$waitingServer" == "$targetServer" ]; then
             echo "The share $shareName already waiting to be migrated to $targetServer."
             continue
-         fi
+         else
             echo "The share $shareName previously set to be migrated to $waitingServer."
             echo "Now it will be migrated to $targetServer."
             sed -i "/$waitingLine/d" "$waitingFile"
@@ -320,6 +355,23 @@ while read -r migrateShareInfo; do
       continue
    fi
 
+
+   ####################
+   # check if pending #
+   ####################
+   if waitingLine=$(grep "^ *$shareName \+" "$waitingFile"); then
+
+      # get pending server #
+      waitingServer=$(echo "$waitingLine" | cut -d ' ' -f2)
+
+       # signal if server changed #
+       if [ "$waitingServer" != "$targetServer" ]; then
+          echo "The share $shareName previously waiting to be migrated to $waitingServer."
+          echo "We are now migrating the share to $targetServer."
+       fi
+   fi
+
+
    ###################
    # rsync to target #
    ###################
@@ -329,7 +381,7 @@ while read -r migrateShareInfo; do
    if [ "$sourceServerIsLocal" == 'true' ]; then
       test -e "$sourceServerSharePath/$shareName"
    else
-      ssh $sourceServer -oBatchMode=yes "test -e $sourceServerSharePath/$shareName"
+      ssh -n $sourceServer -oBatchMode=yes "test -e $sourceServerSharePath/$shareName"
    fi
 
    # rsync if exist #
@@ -393,10 +445,17 @@ unixHomeDirectory: $targetServer" > /tmp/$shareName
       if [ "$sourceServerIsLocal" == 'true' ]; then
          rm -rf "$sourceServerSharePath/$shareName"
       else
-         ssh $sourceServer -oBatchMode=yes "rm -rf $sourceServerSharePath/$shareName"
+         ssh -n $sourceServer -oBatchMode=yes "rm -rf $sourceServerSharePath/$shareName"
       fi
    fi
 
-# done ! #
-# next share #
+
+   #######################
+   # remove from pending #
+   #######################
+   sed -i "/^\s*$shareName\s/d" "$waitingFile"
+
+   # done ! #
+   # next share #
+
 done <<< "$migrateShares";
