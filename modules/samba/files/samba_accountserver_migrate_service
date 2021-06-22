@@ -34,10 +34,11 @@ while read line; do
       # migrate #
       echo "s4usermigrate -n $user $server > /dev/null 2>&1"
 
-      # if successfull remove from the list #
-      if [ "$?" -eq "0" ]; then
-         sed -i "/$line/d" "$userWaitingFile"
-      fi
+      # the s4usermigrate command now remove itself #
+      # the user of the list                        #
+      #if [ "$?" -eq "0" ]; then
+      #   sed -i "/$line/d" "$userWaitingFile"
+      #fi
    fi
 done <<< "$waitingUsers"
 
@@ -65,9 +66,10 @@ while read line; do
       # migrate #
       echo "s4sharemigrate -n $share $server > /dev/null 2>&1"
 
-      # if successfull remove from the list #
-      if [ "$?" -eq "0" ]; then
-         sed -i "/$line/d" "$shareWaitingFile"
-      fi
+      # the s4sharemigrate command now remove itself #
+      # the share of the list                        #
+      #if [ "$?" -eq "0" ]; then
+      #   sed -i "/$line/d" "$shareWaitingFile"
+      #fi
    fi
 done <<< "$waitingShares"
