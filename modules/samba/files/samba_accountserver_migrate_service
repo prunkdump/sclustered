@@ -5,71 +5,18 @@
 # migrate users present in :                             #
 # /var/cache/accountserver/users_waiting_migration.list  #
 #                                                        #
+# and shares present in :                                #
+# /var/cache/accountserver/shares_waiting_migration.list #
+#                                                        #
 #--------------------------------------------------------#
-
-userWaitingFile='/var/cache/accountserver/users_waiting_migration.list'
-shareWaitingFile='/var/cache/accountserver/shares_waiting_migration.list'
 
 
 #####################
 # migrate the users #
 #####################
-
-# get all current waiting users #
-waitingUsers=$(cat $userWaitingFile);
-
-# try to migrate all users #
-while read line; do
-
-   user=''
-   server=''
-
-   # get params #
-   user=$(echo "$line" | cut -d ' ' -f1)
-   server=$(echo "$line" | cut -d ' ' -f2)
-
-   # check #
-   if [ ! -z "$user" ] && [ ! -z "$server" ]; then
-
-      # migrate #
-      echo "s4usermigrate -n $user $server > /dev/null 2>&1"
-
-      # the s4usermigrate command now remove itself #
-      # the user of the list                        #
-      #if [ "$?" -eq "0" ]; then
-      #   sed -i "/$line/d" "$userWaitingFile"
-      #fi
-   fi
-done <<< "$waitingUsers"
-
+s4usermigrate -n -u
 
 ######################
 # migrate the shares #
 ######################
-
-# get all current waiting shares #
-waitingShares=$(cat $shareWaitingFile);
-
-# try to migrate all shares #
-while read line; do
-
-   share=''
-   server=''
-
-   # get params #
-   share=$(echo "$line" | cut -d ' ' -f1)
-   server=$(echo "$line" | cut -d ' ' -f2)
-
-   # check #
-   if [ ! -z "$share" ] && [ ! -z "$server" ]; then
-
-      # migrate #
-      echo "s4sharemigrate -n $share $server > /dev/null 2>&1"
-
-      # the s4sharemigrate command now remove itself #
-      # the share of the list                        #
-      #if [ "$?" -eq "0" ]; then
-      #   sed -i "/$line/d" "$shareWaitingFile"
-      #fi
-   fi
-done <<< "$waitingShares"
+s4sharemigrate -n -u

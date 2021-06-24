@@ -11,8 +11,10 @@ function usage()
     binName=$(basename $0)
     echo "usage: $binName [-n] [-l] <share_name> <target_server>"
     echo "       $binName [-n] [-l] -c <shares_class> <target_server>"
+    echo "       $binName [-n] -u"
     echo "   -n : non interractive"
     echo "   -l : migrate later"
+    echo "   -u : update all pending migrations now"
     exit 0
 }
 
@@ -25,7 +27,7 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":hnlc" opt; do
+    while getopts ":hnlcu" opt; do
 	case $opt in
             n)
                 optNoInterractive='true'
@@ -35,6 +37,9 @@ while [[ -n "$@" ]]; do
                 ;;
             c)
                 optBaseClass='true'
+                ;;
+            u)
+                optUpdatePending='true'
                 ;;
 	    h)
 		usage
@@ -78,17 +83,101 @@ function ask_yes_or_no() {
 # analyse args
 #################
 
-# need two args #
-if [ $# -ne 2 ]; then
-    usage
+# need two args, or none when just update #
+if [ "$optUpdatePending" != "true" ]; then
+   if [ $# -ne 2 ]; then
+      usage
+   fi
+else
+   if [ $# -ne 0 ]; then
+      usage
+   fi
+fi
+
+# the -u switch can't be used with -l or -c #
+if [ "$optUpdatePending" == "true" ]; then
+   if [ "$optLater" == "true" ] || [ "$optBaseClass" == "true" ]; then
+      usage
+   fi
+fi
+
+
+########################
+# server check library #
+########################
+
+# get hostname #
+hostname=$(hostname)
+
+# store checked servers #
+# contain tab separated : #
+# name local=true/false sharePath #
+migrationServers=''
+
+function checkServer() {
+
+   serverName="$1"
+
+   # ensure domain is removed #
+   serverName=$(echo "$serverName" | cut -d. -f1)
+
+   # check if the server is already checked #
+   if echo "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
+      return
+   fi
+
+   # check if local #
+   if [ "$serverName" == "$hostname" ]; then
+      serverIsLocal='true'
+      serverSharePath="$unixSharePath"
+   else
+      serverIsLocal='false'
+
+      # check access to the server #
+      ssh -n $serverName -oBatchMode=yes 'echo hello' > /dev/null
+      if [ "$?" -ne "0" ]; then
+         echo "Cannot access to the server $serverName !"
+         echo "Please set a passwordless ssh connection with ssh-copy-id."
+         exit 1
+      fi
+
+      # get directories #
+      serverSharePath=$(ssh -n $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixSharePath')
+      if [ "$?" -ne "0" ] || [ -z "$serverSharePath" ]; then
+         echo "Cannot find server $serverName share path !"
+         exit 1
+      fi
+
+   fi
+
+   # save #
+   if [ ! -z "$migrationServers" ]; then
+      migrationServers=$(echo -e "$migrationServers\n$serverName\t$serverIsLocal\t$serverSharePath")
+   else
+      migrationServers=$(echo -e "$serverName\t$serverIsLocal\t$serverSharePath")
+   fi
+}
+
+
+###############################
+# get target server and check #
+###############################
+if [ "$optUpdatePending" != "true" ]; then
+   targetServer="$2"
+   targetServer=$(echo "$targetServer" | cut -d. -f1)
+   checkServer "$targetServer"
 fi
 
 
 #############################################
-# check the shares than need to be migrated #
+# check the shares that need to be migrated #
 #############################################
+
+# will contain tab separated : #
+# dn cn sourceServer targetServer #
 migrateShares=''
 
+# BASE CLASS case #
 # if base class is given get all shares inside #
 if [ "$optBaseClass" == "true" ]; then
 
@@ -113,9 +202,9 @@ if [ "$optBaseClass" == "true" ]; then
    fi
 
    # display the result #
-   echo "--------------------------------------------------"
-   echo "The following shares will be migrated to $2 : "
-   echo "--------------------------------------------------"
+   echo "---------------------------------------------------------"
+   echo "The following shares will be migrated to $targetServer : "
+   echo "---------------------------------------------------------"
    while read -r migrateShareInfo; do
 
       # get the share class #
@@ -139,6 +228,54 @@ if [ "$optBaseClass" == "true" ]; then
       fi
    fi
 
+   # add target #
+   migrateShares=$(echo "$migrateShares" | sed "s/$/\t$targetServer/")
+
+# UPDATE case #
+# if we need to update, load and check the share list "
+elif [ "$optUpdatePending" == "true" ]; then
+
+   # check if we have shares to update #
+   pendingMigrationShareCount=$(grep -c -v '^ *$' $waitingFile)
+   if [ "$pendingMigrationShareCount" -eq "0" ]; then
+      echo "No pending share migration to update !"
+      exit 0
+   fi
+
+   # read the file before updating the content in case of error #
+   waitingShares=$(cat $waitingFile);
+
+   # check every waiting share #
+   while read pendingMigrationInfo; do
+
+      # get share and target #
+      pendingMigrationShare=$(echo "$pendingMigrationInfo" | cut -d ' ' -f1)
+      pendingMigrationServer=$(echo "$pendingMigrationInfo" | cut -d ' ' -f2)
+
+      # check share #
+      if ! pendingMigrationShareInfo=$(s4ldbsearch $baseShareDN,$baseDN sub user "(cn=$pendingMigrationShare)" cn unixHomeDirectory); then
+
+          # on error delete the share from the list #
+          # may the share don't exist anymore #
+          sed -i "/^\s*$pendingMigrationShare\s/d" "$waitingFile"
+
+      else
+
+         # check target server #
+         checkServer "$pendingMigrationServer"
+
+         # save share info with target #
+         if [ ! -z "$migrateShares" ]; then
+            migrateShares=$(echo -e "$migrateShares\n$pendingMigrationShareInfo\t$pendingMigrationServer")
+         else
+            migrateShares=$(echo -e "$pendingMigrationShareInfo\t$pendingMigrationServer")
+         fi
+      fi
+
+   done <<< "$waitingShares"
+
+
+# SINGLE SHARE case
 # if no class is given just one share to migrate #
 else
 
@@ -149,6 +286,9 @@ else
       echo "The share $migrateShareName does not exist !"
       exit 1
    fi
+
+   # add the target server #
+   migrateShares=$(echo -e "$migrateShares\t$targetServer")
 fi
 
 
@@ -175,69 +315,9 @@ if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
 fi
 
 
-##################################
-# get target server and hostname #
-##################################
-targetServer="$2"
-targetServer=$(echo "$targetServer" | cut -d. -f1)
-hostname=$(hostname)
-
-
-#####################
-# check all servers #
-#####################
-
-# store checked servers #
-migrationServers=''
-
-# add : name,local=true/false,sharePath #
-# to migrationServers                   #
-function checkServer() {
-
-   serverName="$1"
-
-   # ensure domain is removed #
-   serverName=$(echo "$serverName" | cut -d. -f1)
-
-   # check if the server is already checked #
-   if echo -e "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
-      return
-   fi
-
-   # check if local #
-   if [ "$serverName" == "$hostname" ]; then
-      serverIsLocal='true'
-      serverSharePath="$unixSharePath"
-   else
-      serverIsLocal='false'
-
-      # check access to the server #
-      ssh -n $serverName -oBatchMode=yes 'echo hello' > /dev/null
-      if [ "$?" -ne "0" ]; then
-         echo "Cannot access to the server $serverName !"
-         echo "Please set a passwordless ssh connection with ssh-copy-id."
-         exit 1
-      fi
-
-      # get share path #
-      serverSharePath=$(ssh -n $serverName -oBatchMode=yes '. /etc/samba/s4.conf; echo $unixSharePath')
-      if [ "$?" -ne "0" ] || [ -z "$serverSharePath" ]; then
-         echo "Cannot find server $serverName share path !"
-         exit 1
-      fi
-   fi
-
-   # save #
-   if [ ! -z "$migrationServers" ]; then
-      migrationServers="$migrationServers\n"
-   fi
-   migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverSharePath"
-}
-
-# check target server #
-checkServer "$targetServer"
-
+############################
 # check all source servers #
+############################
 while read -r migrateShareInfo; do
 
    # get source server #
@@ -262,22 +342,6 @@ done <<< "$migrateShares";
 #                          #
 #--------------------------#
 
-# get target server info #
-targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer[[:space:]]")
-if [ "$?" -ne "0" ]; then
-   echo "Failed to get target server $targetServer information !"
-   exit 1
-fi
-
-targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
-targetServerSharePath=$(echo "$targetServerInfo" | cut -f3)
-
-# sanitary check #
-if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerSharePath" ]; then
-   echo "Failed to get target server $targetServer information !"
-   exit 1
-fi
-
 
 ######################
 # migrate all shares #
@@ -288,6 +352,7 @@ while read -r migrateShareInfo; do
    shareDN=$(echo "$migrateShareInfo" | cut -f1)
    shareName=$(echo "$migrateShareInfo" | cut -f2)
    sourceServer=$(echo "$migrateShareInfo" | cut -f3)
+   targetServer=$(echo "$migrateShareInfo" | cut -f4)
 
    # check if we need to migrate #
    if [ "$targetServer" == "$sourceServer" ]; then
@@ -312,7 +377,7 @@ while read -r migrateShareInfo; do
    fi
 
    # get source server info #
-   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer[[:space:]]")
+   sourceServerInfo=$(echo "$migrationServers" | grep "^$sourceServer[[:space:]]")
    if [ "$?" -ne "0" ]; then
       echo "Failed to get source server $sourceServer information !"
       exit 1
@@ -324,6 +389,23 @@ while read -r migrateShareInfo; do
    # sanitary check #
    if [ -z "$sourceServerIsLocal" ] || [ -z "$sourceServerSharePath" ]; then
       echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
+
+
+   # get target server info #
+   targetServerInfo=$(echo "$migrationServers" | grep "^$targetServer[[:space:]]")
+   if [ "$?" -ne "0" ]; then
+      echo "Failed to get target server $targetServer information !"
+      exit 1
+   fi
+
+   targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
+   targetServerSharePath=$(echo "$targetServerInfo" | cut -f3)
+
+   # sanitary check #
+   if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerSharePath" ]; then
+      echo "Failed to get target server $targetServer information !"
       exit 1
    fi
 
@@ -372,19 +454,19 @@ while read -r migrateShareInfo; do
    fi
 
 
-   ###################
-   # rsync to target #
-   ###################
-   shareMigrated=''
+   #########################
+   # rsync share to target #
+   #########################
+   shareDirectoryMigrated=''
 
-   # check if share directory exits #
+   # check if directory exits #
    if [ "$sourceServerIsLocal" == 'true' ]; then
       test -e "$sourceServerSharePath/$shareName"
    else
       ssh -n $sourceServer -oBatchMode=yes "test -e $sourceServerSharePath/$shareName"
    fi
 
-   # rsync if exist #
+   # rsync directory if exist #
    if [ "$?" -eq "0" ]; then
 
       # build source #
@@ -402,13 +484,13 @@ while read -r migrateShareInfo; do
       fi
 
       # rsync #
-      echo "Migrating $shareName to $targetServer..."
+      echo "Migrating $shareName directory to $targetServer..."
       rsync -XAaz --delete-after $rsyncSource $rsyncDest
       if [ "$?" -eq '0' ]; then
-         echo "Share $shareName migrated to $targetServer."
-         shareMigrated='true'
+         echo "Share $shareName directory migrated to $targetServer."
+         shareDirectoryMigrated='true'
       else
-         echo "Error while migrating $shareName to $targetServer !"
+         echo "Error while migrating $shareName directory to $targetServer !"
          exit 1
       fi
    else
@@ -416,14 +498,14 @@ while read -r migrateShareInfo; do
    fi
 
 
-   ################
-   # update share #
-   ################
+   ##################
+   # update account #
+   ##################
 
    echo "dn: $shareDN
 changetype: modify
 replace: unixHomeDirectory
-unixHomeDirectory: $targetServer" > /tmp/$shareName
+unixHomeDirectory: ${targetServer}" > /tmp/$shareName
 
    ldbmodify --url=$samDatabase -b $baseDN /tmp/$shareName
    rm /tmp/$shareName
@@ -439,7 +521,7 @@ unixHomeDirectory: $targetServer" > /tmp/$shareName
    ################
    # clean source #
    ################
-   if [ "$shareMigrated" == 'true' ]; then
+   if [ "$shareDirectoryMigrated" == 'true' ]; then
 
       # remove source #
       if [ "$sourceServerIsLocal" == 'true' ]; then

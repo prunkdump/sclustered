@@ -11,8 +11,10 @@ function usage()
     binName=$(basename $0)
     echo "usage: $binName [-n] [-l] <user_name> <target_server>"
     echo "       $binName [-n] [-l] -c <users_class> <target_server>"
+    echo "       $binName [-n] -u"
     echo "   -n : non interractive"
     echo "   -l : migrate later"
+    echo "   -u : update all pending migrations now"
     exit 0
 }
 
@@ -25,7 +27,7 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":hnlc" opt; do
+    while getopts ":hnlcu" opt; do
 	case $opt in
             n)
                 optNoInterractive='true'
@@ -35,6 +37,9 @@ while [[ -n "$@" ]]; do
                 ;;
             c)
                 optBaseClass='true'
+                ;;
+            u)
+                optUpdatePending='true'
                 ;;
 	    h)
 		usage
@@ -78,120 +83,37 @@ function ask_yes_or_no() {
 # analyse args
 #################
 
-# need two args #
-if [ $# -ne 2 ]; then
-    usage
-fi
-
-
-############################################
-# check the users than need to be migrated #
-############################################
-migrateUsers=''
-
-# if base class is given get all users inside #
-if [ "$optBaseClass" == "true" ]; then
-
-   baseClass="$1"
-
-   # check the class #
-   if ! baseClassInfo=$(s4classcheck $baseClass); then
-      echo "The class $baseClass cannot be found !"
-      exit 1
-   else
-      baseClassDN=$(echo "$baseClassInfo" | grep 'Class DN: ')
-      baseClassDN=${baseClassDN#Class DN: }
+# need two args, or none when just update #
+if [ "$optUpdatePending" != "true" ]; then
+   if [ $# -ne 2 ]; then
+      usage
    fi
-
-   # get all the users #
-   migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory)
-
-   # check if we have users #
-   if [ -z "$migrateUsers" ]; then
-      echo "No users in class $baseClass."
-      exit 0
-   fi
-
-   # display the result #
-   echo "--------------------------------------------------"
-   echo "The following users will be migrated to $2 : "
-   echo "--------------------------------------------------"
-   while read -r migrateUserInfo; do
-
-      # get the user class #
-      migrateUserClass=$(echo "$migrateUserInfo" | cut -f1)
-      migrateUserClass=$(echo "$migrateUserClass" | cut -d ',' -f2)
-      migrateUserClass=${migrateUserClass#OU=}
-
-      # get the user name #
-      migrateUserName=$(echo "$migrateUserInfo" | cut -f2)
-
-      # display #
-      echo "User $migrateUserName from class $migrateUserClass"
-
-   done <<< "$migrateUsers"
-   echo "--------------------------------------------------"
-
-   # if needed ask to continue #
-   if [ "$optNoInterractive" != "true" ]; then
-      if [ $(ask_yes_or_no "Do you want to continue ?") == "no" ]; then
-         exit 0
-      fi
-   fi
-
-# if no class is given just one user to migrate #
 else
+   if [ $# -ne 0 ]; then
+      usage
+   fi
+fi
 
-   migrateUserName="$1"
-
-   # check if the user exist #
-   if ! migrateUsers=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$migrateUserName)" cn unixHomeDirectory); then
-      echo "The user $migrateUserName does not exist !"
-      exit 1
+# the -u switch can't be used with -l or -c #
+if [ "$optUpdatePending" == "true" ]; then
+   if [ "$optLater" == "true" ] || [ "$optBaseClass" == "true" ]; then
+      usage
    fi
 fi
 
 
-##############
-# check time #
-##############
-if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
+########################
+# server check library #
+########################
 
-   # get current time #
-   currentTime=$(date +%H%M | sed 's/^0*//');
-
-   # check time #
-   # warning between 5:00 and 21:00 #
-   if [ "$currentTime" -gt "500" ] && [ "$currentTime" -lt "2100" ]; then
-      echo "----------------------------------------------------------------"
-      echo "WARNING : you are about to migrate users !"
-      echo "You need to be sure that the users are not currently logged !"
-      echo "You can use the -l option to migrate the user later by cron job."
-      echo "----------------------------------------------------------------"
-      if [ $(ask_yes_or_no "Are you sure you want to continue ?") == "no" ]; then
-         exit 0
-      fi
-   fi
-fi
-
-
-##################################
-# get target server and hostname #
-##################################
-targetServer="$2"
-targetServer=$(echo "$targetServer" | cut -d. -f1)
+# get hostname #
 hostname=$(hostname)
 
-
-#####################
-# check all servers #
-#####################
-
 # store checked servers #
+# contain tab separated : #
+# name local=true/false homePath profilePath #
 migrationServers=''
 
-# add : name,local=true/false,homePath,profilePath #
-# to migrationServers                              #
 function checkServer() {
 
    serverName="$1"
@@ -200,7 +122,7 @@ function checkServer() {
    serverName=$(echo "$serverName" | cut -d. -f1)
 
    # check if the server is already checked #
-   if echo -e "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
+   if echo "$migrationServers" | grep -q "^$serverName[[:space:]]"; then
       return
    fi
 
@@ -236,15 +158,172 @@ function checkServer() {
 
    # save #
    if [ ! -z "$migrationServers" ]; then
-      migrationServers="$migrationServers\n"
+      migrationServers=$(echo -e "$migrationServers\n$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath")
+   else
+      migrationServers=$(echo -e "$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath")
    fi
-   migrationServers="$migrationServers$serverName\t$serverIsLocal\t$serverHomePath\t$serverProfilePath"
 }
 
-# check target server #
-checkServer "$targetServer"
 
+###############################
+# get target server and check #
+###############################
+if [ "$optUpdatePending" != "true" ]; then
+   targetServer="$2"
+   targetServer=$(echo "$targetServer" | cut -d. -f1)
+   checkServer "$targetServer"
+fi
+
+
+############################################
+# check the users that need to be migrated #
+############################################
+
+# will contain tab separated : #
+# dn cn unixHomeDirectory targetServer #
+migrateUsers=''
+
+# BASE CLASS case #
+# if base class is given get all users inside #
+if [ "$optBaseClass" == "true" ]; then
+
+   baseClass="$1"
+
+   # check the class #
+   if ! baseClassInfo=$(s4classcheck $baseClass); then
+      echo "The class $baseClass cannot be found !"
+      exit 1
+   else
+      baseClassDN=$(echo "$baseClassInfo" | grep 'Class DN: ')
+      baseClassDN=${baseClassDN#Class DN: }
+   fi
+
+   # get all the users #
+   migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory)
+
+   # check if we have users #
+   if [ -z "$migrateUsers" ]; then
+      echo "No users in class $baseClass."
+      exit 0
+   fi
+
+   # display the result #
+   echo "--------------------------------------------------------"
+   echo "The following users will be migrated to $targetServer : "
+   echo "--------------------------------------------------------"
+   while read -r migrateUserInfo; do
+
+      # get the user class #
+      migrateUserClass=$(echo "$migrateUserInfo" | cut -f1)
+      migrateUserClass=$(echo "$migrateUserClass" | cut -d ',' -f2)
+      migrateUserClass=${migrateUserClass#OU=}
+
+      # get the user name #
+      migrateUserName=$(echo "$migrateUserInfo" | cut -f2)
+
+      # display #
+      echo "User $migrateUserName from class $migrateUserClass"
+
+   done <<< "$migrateUsers"
+   echo "--------------------------------------------------"
+
+   # if needed ask to continue #
+   if [ "$optNoInterractive" != "true" ]; then
+      if [ $(ask_yes_or_no "Do you want to continue ?") == "no" ]; then
+         exit 0
+      fi
+   fi
+
+   # add target #
+   migrateUsers=$(echo "$migrateUsers" | sed "s/$/\t$targetServer/")
+
+# UPDATE case #
+# if we need to update, load and check the user list "
+elif [ "$optUpdatePending" == "true" ]; then
+
+   # check if we have users to update #
+   pendingMigrationUserCount=$(grep -c -v '^ *$' $waitingFile)
+   if [ "$pendingMigrationUserCount" -eq "0" ]; then
+      echo "No pending user migration to update !"
+      exit 0
+   fi
+
+   # read the file before updating the content in case of error #
+   waitingUsers=$(cat $waitingFile);
+
+   # check every waiting user #
+   while read pendingMigrationInfo; do
+
+      # get user and target #
+      pendingMigrationUser=$(echo "$pendingMigrationInfo" | cut -d ' ' -f1)
+      pendingMigrationServer=$(echo "$pendingMigrationInfo" | cut -d ' ' -f2)
+
+      # check user #
+      if ! pendingMigrationUserInfo=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$pendingMigrationUser)" cn unixHomeDirectory); then
+
+          # on error delete the user from the list #
+          # may the user don't exist anymore #
+          sed -i "/^\s*$pendingMigrationUser\s/d" "$waitingFile"
+
+      else
+
+         # check target server #
+         checkServer "$pendingMigrationServer"
+
+         # save user info with target #
+         if [ ! -z "$migrateUsers" ]; then
+            migrateUsers=$(echo -e "$migrateUsers\n$pendingMigrationUserInfo\t$pendingMigrationServer")
+         else
+            migrateUsers=$(echo -e "$pendingMigrationUserInfo\t$pendingMigrationServer")
+         fi
+      fi
+
+   done <<< "$waitingUsers"
+
+
+# SINGLE USER case
+# if no class is given just one user to migrate #
+else
+
+   migrateUserName="$1"
+
+   # check if the user exist #
+   if ! migrateUsers=$(s4ldbsearch $baseUserDN,$baseDN sub user "(cn=$migrateUserName)" cn unixHomeDirectory); then
+      echo "The user $migrateUserName does not exist !"
+      exit 1
+   fi
+
+   # add the target server #
+   migrateUsers=$(echo -e "$migrateUsers\t$targetServer")
+fi
+
+
+##############
+# check time #
+##############
+if [ "$optNoInterractive" != "true" ] && [ "$optLater" != "true" ]; then
+
+   # get current time #
+   currentTime=$(date +%H%M | sed 's/^0*//');
+
+   # check time #
+   # warning between 5:00 and 21:00 #
+   if [ "$currentTime" -gt "500" ] && [ "$currentTime" -lt "2100" ]; then
+      echo "----------------------------------------------------------------"
+      echo "WARNING : you are about to migrate users !"
+      echo "You need to be sure that the users are not currently logged !"
+      echo "You can use the -l option to migrate the user later by cron job."
+      echo "----------------------------------------------------------------"
+      if [ $(ask_yes_or_no "Are you sure you want to continue ?") == "no" ]; then
+         exit 0
+      fi
+   fi
+fi
+
+
+############################
 # check all source servers #
+############################
 while read -r migrateUserInfo; do
 
    # get source server #
@@ -271,23 +350,6 @@ done <<< "$migrateUsers";
 #                          #
 #--------------------------#
 
-# get target server info #
-targetServerInfo=$(echo -e "$migrationServers" | grep "^$targetServer[[:space:]]")
-if [ "$?" -ne "0" ]; then
-   echo "Failed to get target server $targetServer information !"
-   exit 1
-fi
-
-targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
-targetServerHomePath=$(echo "$targetServerInfo" | cut -f3)
-targetServerProfilePath=$(echo "$targetServerInfo" | cut -f4)
-
-# sanitary check #
-if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerHomePath" ] || [ -z "$targetServerProfilePath" ]; then
-   echo "Failed to get target server $targetServer information !"
-   exit 1
-fi
-
 
 #####################
 # migrate all users #
@@ -300,6 +362,7 @@ while read -r migrateUserInfo; do
    sourceServer=$(echo "$migrateUserInfo" | cut -f3)
    sourceServer=${sourceServer#/dnfs/$homeShare/}
    sourceServer=$(echo "$sourceServer" | cut -d'/' -f1)
+   targetServer=$(echo "$migrateUserInfo" | cut -f4)
 
    # check if we need to migrate #
    if [ "$targetServer" == "$sourceServer" ]; then
@@ -324,7 +387,7 @@ while read -r migrateUserInfo; do
    fi
 
    # get source server info #
-   sourceServerInfo=$(echo -e "$migrationServers" | grep "^$sourceServer[[:space:]]")
+   sourceServerInfo=$(echo "$migrationServers" | grep "^$sourceServer[[:space:]]")
    if [ "$?" -ne "0" ]; then
       echo "Failed to get source server $sourceServer information !"
       exit 1
@@ -337,6 +400,24 @@ while read -r migrateUserInfo; do
    # sanitary check #
    if [ -z "$sourceServerIsLocal" ] || [ -z "$sourceServerHomePath" ] || [ -z "$sourceServerProfilePath" ]; then
       echo "Failed to get source server $sourceServer information !"
+      exit 1
+   fi
+
+
+   # get target server info #
+   targetServerInfo=$(echo "$migrationServers" | grep "^$targetServer[[:space:]]")
+   if [ "$?" -ne "0" ]; then
+      echo "Failed to get target server $targetServer information !"
+      exit 1
+   fi
+
+   targetServerIsLocal=$(echo "$targetServerInfo" | cut -f2)
+   targetServerHomePath=$(echo "$targetServerInfo" | cut -f3)
+   targetServerProfilePath=$(echo "$targetServerInfo" | cut -f4)
+
+   # sanitary check #
+   if [ -z "$targetServerIsLocal" ] || [ -z "$targetServerHomePath" ] || [ -z "$targetServerProfilePath" ]; then
+      echo "Failed to get target server $targetServer information !"
       exit 1
    fi
 
