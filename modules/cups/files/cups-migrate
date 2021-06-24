@@ -1,0 +1,99 @@
+#!/bin/bash
+
+# usage #
+function usage()
+{
+    binName=$(basename $0)
+    echo "usage: $binName targetServer"
+    exit 1
+}
+
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [N]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+
+#################
+# analyse args
+#################
+
+# need just one arg, the target server #
+if [ $# -ne 1 ]; then
+   usage
+fi
+
+targetServer="$1"
+
+# ask confirmation #
+echo "!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!"
+echo "This script will copy the current cups"
+echo "configuration to $targetServer."
+echo "All the target host cups configuration"
+echo "will be overwritten !"
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+if [ $(ask_yes_or_no "Do you want to continue ?") != "yes" ]; then
+   exit 0
+fi
+
+
+#####################
+# prepare migration #
+#####################
+
+# check access to target server #
+ssh -n $targetServer -oBatchMode=yes 'echo hello' > /dev/null
+if [ "$?" -ne "0" ]; then
+   echo "Cannot access to the server $targetServer !"
+   echo "Please set a passwordless ssh connection with ssh-copy-id."
+   exit 1
+fi
+
+# check the source files #
+if [ ! -e "/etc/cups/printers.conf" ]; then
+   echo "Cannot find cups printers configuration file !"
+   exit 1
+fi
+
+if [ ! -d "/etc/cups/ppd" ]; then
+   echo "Cannot find cups PPD files !"
+   exit 1
+fi
+
+# check the target directories #
+ssh -n $targetServer -oBatchMode=yes "test -d /etc/cups"
+if [ "$?" -ne "0" ]; then
+   echo "Cannot find target server cups configuration directory !"
+   exit 1
+fi
+
+ssh -n $targetServer -oBatchMode=yes "test -d /etc/cups/ppd"
+if [ "$?" -ne "0" ]; then
+   echo "Cannot find target server cups PPD directory !"
+   exit 1
+fi
+
+
+###########
+# migrate #
+###########
+
+# stop cups #
+ssh -n $targetServer -oBatchMode=yes "systemctl stop cups"
+
+# copy configuration file #
+scp "/etc/cups/printers.conf" "$targetServer:/etc/cups/printers.conf"
+
+# copy PPDs #
+scp -r "/etc/cups/ppd" "$targetServer:/etc/cups/ppd"
+
+# start cups #
+ssh -n $targetServer -oBatchMode=yes "systemctl start cups"
+
+# done ! #
+echo "Cups printers migrated to $targetServer !"
+
