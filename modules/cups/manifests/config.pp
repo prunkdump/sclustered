@@ -24,6 +24,17 @@ class cups::config {
       ensure => present,
    }
 
+   file_option { 'cups_admin_web_access':
+      path => '/etc/cups/cupsd.conf',
+      option => 'Allow',
+      value => "$web_access",
+      after => '<Location /admin>',
+      separator => ' ',
+      multiple => true,
+      ensure => present,
+   }
+
+
    ####################
    # disable browsing #
    ####################
