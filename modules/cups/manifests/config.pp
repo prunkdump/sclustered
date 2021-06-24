@@ -14,23 +14,19 @@ class cups::config {
       ensure => present,
    }
 
-   file_option { 'cups_web_access':
+   file_line { 'cups_web_access':
       path => '/etc/cups/cupsd.conf',
-      option => 'Allow',
-      value => "$web_access",
+      line => "  Allow $web_access",
       after => '<Location />',
-      separator => ' ',
-      multiple => true,
       ensure => present,
    }
 
-   file_option { 'cups_admin_web_access':
+   # added two spaces at end of line #
+   # to separate from previous ressource  #
+   file_line { 'cups_admin_web_access':
       path => '/etc/cups/cupsd.conf',
-      option => 'Allow',
-      value => "$web_access",
+      line => "  Allow $web_access  ",
       after => '<Location /admin>',
-      separator => ' ',
-      multiple => true,
       ensure => present,
    }
 
