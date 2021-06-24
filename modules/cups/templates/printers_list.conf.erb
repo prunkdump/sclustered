@@ -4,16 +4,16 @@
 <% @printers.each do |printerName,printerParams| -%>
 <% if printerParams.is_a?(String) -%>
 <% if printerParams == 'default' -%>
-<% if @default_printer -%>
-<%= printerName %>      <%= @default_printer %> <%= printerName %><% if printerName == @default_printer %>        default<% end %>
+<% if @default_printserver -%>
+<%= printerName %>      <%= @default_printserver %> <%= printerName %><% if printerName == @default_printer %>        default<% end %>
 <% end -%>
 <% else -%>
 <%= printerName %>      <%= printerParams %> <%= printerName %><% if printerName == @default_printer %>        default<% end %>
 <% end -%>
 <% else -%>
 <% if printerParams[0] == 'default' -%>
-<% if @default_printer -%>
-<%= printerName %>      <%= @default_printer %> <%= printerParams[1] ? printerParams[1] : printerName %><% if printerName == @default_printer %>        default<% end %>
+<% if @default_printserver -%>
+<%= printerName %>      <%= @default_printserver %> <%= printerParams[1] ? printerParams[1] : printerName %><% if printerName == @default_printer %>        default<% end %>
 <% end -%>
 <% else -%>
 <%= printerName %>      <%= printerParams[0] %> <%= printerParams[1] ? printerParams[1] : printerName %><% if printerName == @default_printer %>        default<% end %>
