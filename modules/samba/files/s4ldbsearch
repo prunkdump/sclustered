@@ -12,7 +12,7 @@ binmode(STDOUT,':encoding(UTF-8)');
 
 sub displayUsage {
    my $callerProgram = basename($0);
-   print("$callerProgram <base_dn> <base|sub|one> <user|group|ou|all> <search_cond> [attribute1] [attribute2] ...\n");
+   print("usage : $callerProgram <base_dn> <base|sub|one> <user|group|ou|all> <search_cond> [attribute1] [attribute2] ...\n");
    exit(0);
 }
 

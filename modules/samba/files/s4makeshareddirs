@@ -20,7 +20,7 @@ binmode(STDOUT,':encoding(UTF-8)');
 #########
 sub displayUsage {
    my $callerProgram = basename($0);
-   print("usage: $0 [-c baseClass] [-f] [-d] [-n] [-b backupDir]\n");
+   print("usage: $callerProgram [-c baseClass] [-f] [-d] [-n] [-b backupDir]\n");
    print("   -c : update only dirs belonging to baseClass\n");
    print("   -f : force updating all shares and permissions, still interactive\n");
    print("   -d : delete unused data dirs, ask for confirmation if no backup dir is given\n");
