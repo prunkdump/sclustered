@@ -1,0 +1,573 @@
+#! /usr/bin/perl -w -CD
+use strict;
+use warnings;
+use utf8;
+use File::Basename;
+use Term::ReadKey;
+
+#!!!
+use Data::Dumper;
+
+# output as utf8 #
+binmode(STDOUT,':encoding(UTF-8)');
+
+# global params #
+my $printerSharePath = "/srv/samba/Printer_drivers";
+my $sambaPrinterCheckTimeout = 180;
+
+
+sub askYesOrNo {
+
+   # get params, the questions #
+   my $question = $_[0];
+
+   # ask #
+   while( 1 ) {
+      print("$question ([y]es or [N]o): ");
+      my $rep = <STDIN>;
+      if( $rep =~ m/^y(es|)$/ ) {
+         return 'yes';
+      }
+      elsif( $rep =~ m/^no?$/ ) {
+         return 'no';
+      }
+   }
+}
+
+
+#########
+# usage #
+#########
+sub displayUsage {
+   my $callerProgram = basename($0);
+   print("usage: $callerProgram <target_server>\n");
+   exit(0);
+}
+
+# check args #
+if( @ARGV != 1 ){
+   displayUsage();
+}
+
+my $targetServer = $ARGV[0];
+
+# ask confirmation #
+print("--------------------------------------\n");
+print("!!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!\n");
+print("This script will copy the current print\n");
+print("server configuration to $targetServer.\n");
+print("All the target host print configuration\n");
+print("will be overwritten !\n");
+print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+print("--------------------------------------\n");
+if( askYesOrNo("Do you want to continue ?") eq "no" ) {
+   exit(0);
+}
+
+
+######################
+# get samba password #
+######################
+
+# get login #
+print("Please give an samba print server administration account.\n");
+print("(default : administrator)\n");
+print("login : ");
+my $printAdmin = <STDIN>;
+chomp($printAdmin);
+
+if( ! length($printAdmin) ) {
+   $printAdmin = "administrator";
+   print("login : administrator\n");
+}
+
+# get pass  #
+print("password : "); 
+ReadMode('noecho');
+my $printAdminPass = ReadLine(0);
+ReadMode('restore');
+chomp($printAdminPass);
+print("\n");
+
+# check samba password #
+open(my $kinitCall, "|-", "kinit $printAdmin");
+print $kinitCall "$printAdminPass\n";
+close($kinitCall);
+
+if( $? !=  0 ) {
+   print("Failed to authenticate with the given account !\n");
+   exit(1);
+} 
+
+#######################
+# check target server #
+#######################
+
+# check ssh access #
+system("ssh -n $targetServer -oBatchMode=yes 'echo hello' > /dev/null");
+if( $? != 0 ) {
+   print("Cannot access to the server $targetServer !\n");
+   print("Please set a passwordless ssh connection with ssh-copy-id.\n");
+   exit(1);
+}
+
+#-----------------------------------#
+#                                   #
+# 1) Migrate cups configuration     #
+#                                   #
+#-----------------------------------#
+my %printers;
+
+#############################
+# check cups configurtation #
+#############################
+
+# check source files #
+if( ! -e "/etc/cups/printers.conf" ) {
+   print("Cannot find cups printers configuration file !\n");
+   exit(1);
+}
+
+if( ! -d "/etc/cups/ppd" ) {
+   print("Cannot find cups PPD files !\n");
+   exit(1);
+}
+
+# check target files #
+system("ssh -n $targetServer -oBatchMode=yes 'test -d /etc/cups'");
+if( $? != 0 ) {
+   print("Cannot find target server cups configuration directory !\n");
+   exit(1);
+}
+
+system("ssh -n $targetServer -oBatchMode=yes 'test -d /etc/cups/ppd'");
+if( $? != 0 ) {
+   print("Cannot find target server cups PPD directory !\n");
+   exit(1);
+}
+
+# get printer list #
+open(my $cupsConfFileHdl, "<", "/etc/cups/printers.conf") or die("Cannot open cups configuration file !");
+while( my $cupsConfLine = <$cupsConfFileHdl> ) {
+
+   chomp($cupsConfLine);
+
+   # search for cups definition line #
+   if( $cupsConfLine =~ m/<Printer (.*?)>/ ) {
+
+      # create printer hash #
+      my $newPrinterName = $1;
+      my %newPrinter = (name => $newPrinterName);
+      
+      # save #
+      $printers{$newPrinterName} = \%newPrinter;
+   }
+}
+
+##############################
+# migrate cups configuration #
+##############################
+
+# signal #
+print("--------------------------\n");
+print("Migrating the following printer's cups configuration :\n");
+foreach my $printerName (keys %printers) {
+   print("$printerName\n");
+}
+print("--------------------------\n");
+print("Migrating configuration files...\n");
+
+# stop cups on target server #
+system("ssh -n $targetServer -oBatchMode=yes 'systemctl stop cups'");
+
+# copy cups configuration file #
+system("scp -q '/etc/cups/printers.conf' '$targetServer:/etc/cups/printers.conf'");
+
+# copy PPDs #
+system("scp -q -r '/etc/cups/ppd' '$targetServer:/etc/cups/ppd'");
+
+# restart cups on target server #
+system("ssh -n $targetServer -oBatchMode=yes 'systemctl start cups'");
+
+print("Cups server migration done !\n");
+
+
+#---------------------------------------------#
+#                                             #
+# 2 ) Wait for samba loading cups printer     #
+#                                             #
+#---------------------------------------------#
+
+
+my $sambaAllPrintersLoaded = 'false';
+my $sambaPrintersCheckStartTime = time();
+my $sambaPrintersCheckElapsedTime = 0;
+
+# signal #
+print("Waiting for target samba server loading cups printers... ");
+print("(max $sambaPrinterCheckTimeout seconds)\n"); 
+
+# wait until all printers are loaded or timeout #
+while( $sambaAllPrintersLoaded ne "true" && $sambaPrintersCheckElapsedTime < $sambaPrinterCheckTimeout ) {
+
+   # get loaded printers with rpcclient #
+   open(my $rpcclientCall, "-|", "rpcclient $targetServer -U '" . $printAdmin . '%' . $printAdminPass . "' -c 'enumprinters'");
+   
+   # search for samba printer name #
+   while(my $sambaPrinterLine = <$rpcclientCall> ) {
+
+      chomp($sambaPrinterLine);
+
+      if( $sambaPrinterLine =~ m/^\s*name:\[.*\\(.*?)\]/ ) {
+
+         my $newSambaPrinterName = $1;
+
+         # search for a corresponding printer #
+         foreach my $printerName (keys %printers) {
+            if( lc($printerName) eq lc($newSambaPrinterName) ) {
+ 
+               # save #
+               $printers{$printerName}->{sambaName} = $newSambaPrinterName;
+            }
+         }
+      }
+   }
+
+   # close #
+   close($rpcclientCall);
+   if( $? != 0 ) {
+      print("Failed to send rpc call to $targetServer !\n");
+      exit(1);
+   }
+
+   # check if all printers are loaded #
+   $sambaAllPrintersLoaded = 'true';
+   foreach my $printerName (keys %printers) {
+      if( ! defined($printers{$printerName}->{sambaName}) ) {
+         $sambaAllPrintersLoaded = 'false';
+         last;
+      }
+   }
+
+   # wait if needed #
+   if( $sambaAllPrintersLoaded ne "true" ) {
+      sleep(2);
+   }
+
+   # update vars #
+   $sambaPrintersCheckElapsedTime = time() - $sambaPrintersCheckStartTime;
+}
+
+
+# check result #
+if( $sambaAllPrintersLoaded ne "true" ) {
+   print("Cups printer never loaded by the samba server on target server !\n");
+   print("Please check your samba configuration.\n");
+   exit(1);
+}
+print("All cups printers loaded on target samba server !\n");
+
+
+#---------------------------------------#
+#                                       #
+#  3) Migrate samba printer drivers     #
+#                                       #
+#---------------------------------------#
+
+my %drivers;
+my %archs;
+
+#########################
+# get installed drivers #
+#########################
+
+# get driver list by rpc #
+open(my $rpcclientCall, "-|", "rpcclient localhost -U '" . $printAdmin . '%' . $printAdminPass . "' -c 'enumdrivers 3'");
+
+my $driverInfoStarted = 'false';
+my $currentDriver;
+
+while(my $driverInfoLine = <$rpcclientCall> ) {
+
+   chomp($driverInfoLine);
+
+   # check start #
+   if( $driverInfoLine =~ m/^Printer Driver Info/ ) {
+      $driverInfoStarted = 'true';
+
+      # create driver #
+      my %newDriver = ();
+      $currentDriver = \%newDriver; 
+
+      next;
+   }
+
+   # parse info #
+   if( $driverInfoStarted eq 'true' ) {
+
+      # check end #
+      if( $driverInfoLine =~ m/^\s*$/ ) { 
+         $driverInfoStarted = 'false';
+
+         # check needed values #
+         if( defined($currentDriver->{arch}) &&
+             defined($currentDriver->{version}) &&
+             defined($currentDriver->{name}) &&
+             defined($currentDriver->{mainFile}) &&
+             defined($currentDriver->{dataFile}) &&
+             defined($currentDriver->{configFile}) ) {
+
+            # save #
+            $drivers{$currentDriver->{name}} = $currentDriver;
+         }
+
+         next;
+      }
+
+      # name #
+      if( $driverInfoLine =~ m/^\s*Driver Name:\s*\[(.*?)\]/ ) {
+         $currentDriver->{name} = $1;
+      }
+
+      # architecture #
+      if( $driverInfoLine =~ m/^\s*Architecture:\s*\[(.*?)\]/ ) {
+         $currentDriver->{arch} = $1;
+         $archs{$1}{name} = $1;
+      }
+
+      # version #
+      if( $driverInfoLine =~ m/^\s*Version:\s*\[(.*?)\]/ ) {
+         $currentDriver->{version} = $1;
+      }
+
+      # main file #
+      if( $driverInfoLine =~ m/^\s*Driver Path:\s*\[.*\\(.*?)\]/ ) {
+         $currentDriver->{mainFile} = $1;
+      }
+
+      # data file #
+      if( $driverInfoLine =~ m/^\s*Datafile:\s\[.*\\(.*?)\]/ ) {
+         $currentDriver->{dataFile} = $1;
+      }
+
+      # config file #
+      if( $driverInfoLine =~ m/^\s*Configfile:\s*\[.*\\(.*?)\]/ ) {
+         $currentDriver->{configFile} = $1;
+      }
+
+      # help file #
+      if( $driverInfoLine =~ m/^\s*Helpfile:\s*\[.*\\(.*?)\]/ ) {
+         $currentDriver->{helpFile} = $1;
+      }
+
+      # monitor name #
+      if( $driverInfoLine =~ m/^\s*Monitorname:\s*\[(.*?)\]/ ) {
+         $currentDriver->{monitorName} = $1;
+      }
+
+      # default data type #
+      if( $driverInfoLine =~ m/^\s*Defaultdatatype:\s*\[(.*?)\]/ ) {
+         $currentDriver->{defaultDataType} = $1;
+      }
+
+      # files #
+      if( $driverInfoLine =~ m/^\s*Dependentfiles:\s*\[.*\\(.*?)\]/ ) {
+
+         my $driverFileName = $1;
+
+         # check if file array is defined #
+         if( ! defined($currentDriver->{files}) ) {
+            my @newFileArray = ();
+            $currentDriver->{files} = \@newFileArray;
+         }
+
+         # add to file array #
+         my $driverFileArray = $currentDriver->{files};
+         push @$driverFileArray, $driverFileName;
+      }
+   }
+}
+
+# close #
+close($rpcclientCall);
+if( $? != 0 ) {
+  print("Failed to send rpc call to localhost !\n");
+  exit(1);
+}
+
+
+#################
+# get arch dirs #
+#################
+
+foreach my $archName (keys %archs) {
+
+   # get arch directory by rpc #
+   open(my $rpcclientDirCall, "-|", "rpcclient localhost -U '" . $printAdmin . '%' . $printAdminPass . "' -c 'getdriverdir \"$archName\"'");
+
+   while( my $archDirInfoLine = <$rpcclientDirCall> ) {
+
+      chomp($archDirInfoLine);
+
+      if( $archDirInfoLine =~ m/^\s*Directory Name:\s*\[.*print\$\\(.*?)\]/ ) {
+
+         # save #
+         my $archDir = $1;
+         $archDir =~ s|\\|/|g;
+         $archs{$archName}{dir} = $archDir;
+         last;
+      }
+   }
+
+   # close #
+   close($rpcclientDirCall);
+   if( $? != 0 ) {
+     print("Failed to send rpc call to localhost !\n");
+     exit(1);
+   }
+}
+
+
+###################
+# migrate drivers #
+###################
+
+# for each drivers #
+foreach my $driverName (keys %drivers) {
+
+   # get driver hash #
+   my $driver = $drivers{$driverName};
+
+   # get arch and dir and version #
+   my $driverArch = $driver->{arch};
+   my $driverArchDir = $archs{$driverArch}{dir};
+   my $driverVersion = $driver->{version};
+
+   # build list of files #
+   my @migrationFiles;
+
+   push @migrationFiles, $driver->{mainFile};
+   push @migrationFiles, $driver->{dataFile};
+   push @migrationFiles, $driver->{configFile};
+   if( defined($driver->{helpFile} && $driver->{helpFile} ne "" ) ) {
+      push @migrationFiles, $driver->{helpFile};
+   }
+
+   if( defined($driver->{files}) ) {
+      my $driverAdditionnalFiles = $driver->{files};
+      push @migrationFiles, @$driverAdditionnalFiles;
+   }
+
+   # copy files with rsync to keep acls and xattrs #
+   print("Migrating driver files to $targetServer...\n");
+   my $driverFileSources = join(" ", map { "$printerSharePath/$driverArchDir/$driverVersion/$_" } @migrationFiles);
+   my $driverFileDestination = "$targetServer:$printerSharePath/$driverArchDir/";
+   system("rsync -XAaz $driverFileSources $driverFileDestination");
+
+   # build rpc command  #
+   my $addDriverCommand = "adddriver \"$driverArch\" \"";
+   $addDriverCommand .= "$driver->{name}:$driver->{mainFile}:$driver->{dataFile}:$driver->{configFile}";
+   if( defined($driver->{helpFile}) && $driver->{helpFile} ne "" ) {
+      $addDriverCommand .= ":$driver->{helpFile}"
+   } else {
+      $addDriverCommand .= ":NULL"
+   }
+   if( defined($driver->{monitorName}) && $driver->{monitorName} ne "" ) {
+      $addDriverCommand .= ":$driver->{monitorName}"
+   } else {
+      $addDriverCommand .= ":NULL"
+   }
+   if( defined($driver->{defaultDataType}) && $driver->{defaultDataType} ne "" ) {
+      $addDriverCommand .= ":$driver->{defaultDataType}"
+   } else {
+      $addDriverCommand .= ":NULL"
+   }
+   if( defined($driver->{files}) ) {
+      $addDriverCommand .= ":";
+      my $driverAdditionnalFiles = $driver->{files};
+      foreach my $driverAdditionnalFile (@$driverAdditionnalFiles) {
+         $addDriverCommand .= "$driverAdditionnalFile,";
+      }
+      $addDriverCommand = substr($addDriverCommand, 0, -1);
+   } else {
+      $addDriverCommand .= ":NULL"
+   }
+
+   # send rpc command #
+   print("Adding driver to target server : $driver->{name} ...\n");
+   system("rpcclient $targetServer -U '" . $printAdmin . '%' . $printAdminPass . "' -c '$addDriverCommand'");
+
+   # client files #
+   print("Cleaning drivers files...\n");
+   my $driverCleanFiles = join(" ", map { "$printerSharePath/$driverArchDir/$_" } @migrationFiles);
+   system("ssh -n $targetServer -oBatchMode=yes 'rm -f $driverCleanFiles'");
+
+}
+
+
+#------------------------------------#  
+#                                    #
+# 4) assign drivers to printers      #
+#                                    #
+#------------------------------------#
+
+##########################
+# get current assignment #
+##########################
+my %printersWithDriver;
+
+# enum printers on current host #
+open(my $rpcclientPrinterCall, "-|", "rpcclient localhost -U '" . $printAdmin . '%' . $printAdminPass . "' -c 'enumprinters'");
+
+while(my $printerInfoLine = <$rpcclientPrinterCall> ) {
+
+   chomp($printerInfoLine);
+
+   # get printer desc line #
+   if( $printerInfoLine =~ m/^\s*description:\s*\[.*\\(.*?),(.*?),(.*?)\]/ ) {
+
+      #  get printer params #
+      my $printerDescName = $1;
+      my $printerDescDriver = $2;
+      my $printerDescInfo = $3;
+
+      # save #
+      $printersWithDriver{$printerDescName} = $printerDescDriver;
+     
+   }
+}
+  
+# close #
+close($rpcclientPrinterCall);
+if( $? != 0 ) {
+  print("Failed to send rpc call to localhost !\n");
+  exit(1);
+} 
+
+# assign drivers to printers #
+foreach my $printerSambaName (keys %printersWithDriver) {
+
+   # get assigned driver #
+   my $printerSambaDriver = $printersWithDriver{$printerSambaName};
+
+   # send rpc command #
+   system("rpcclient $targetServer -U '" . $printAdmin . '%' . $printAdminPass . "' -c 'setdriver \"$printerSambaName\" \"$printerSambaDriver\"'");
+} 
+
+#---------------------------#
+#                           #
+# 5) Final warning          #
+#                           #
+#---------------------------#
+print("------------------------------------------\n");
+print("!!!!!!!!!!!!! WARNING !!!!!!!!!!!!!!!!!!!!\n");
+print("Print server successfully migrated !\n");
+print("\n");
+print("But this does not change the print server\n");
+print("assignment on client hosts !\n");
+print("\n");
+print("Check your GPOs and your puppet hiera print\n");
+print("params !\n");
+print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+print("------------------------------------------\n");
+

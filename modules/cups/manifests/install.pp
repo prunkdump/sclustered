@@ -9,10 +9,10 @@ class cups::install {
    }
 
    # script to migrate printers #
-   file { 'cups-migrate':
-      path => '/usr/bin/cups-migrate',
+   file { 'cups-server-migrate':
+      path => '/usr/bin/cups-server-migrate',
       ensure => file,
-      source => 'puppet:///modules/cups/cups-migrate',
+      source => 'puppet:///modules/cups/cups-server-migrate',
       mode => '0755',
    }
 }
