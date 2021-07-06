@@ -1,13 +1,29 @@
 #! /bin/bash
 
-# by security don't apply on error #
-samSearch=$(s4ldbsearch -H <%= @private_path %>/sam.ldb '(ou=<%= @users_ou %>)')
+################################################
+# This script create a base Samba AD structure #
+# so it need to be run just one time when      #
+# installing the first DC. Just after the      #
+# domain provision.                            #
+#                                              #
+# Running this script on a already running DC  #
+# can break the domain !                       #
+################################################
+
+
+# unsure samba domain is provisionned and ldbsearch works #
+# if not, don't go further as we can't check if the script #
+# has already be run #
+samSearch=$(ldbsearch --show-binary -H <%= @private_path %>/sam.ldb -s base -b OU=<%= @users_ou %>,<%= @base_dn %> ou)
 if [ "$?" -ne "0" ]; then
+   echo "Failed to search on the AD database ! Does the domain is provisionned ?"
    exit 0
 fi
 
 # check if samba AD already configured #
-if echo "$samSearch" | grep -q 'dn: OU=<%= @users_ou %>'; then
+# by this script. We check the main users OU #
+if echo "$samSearch" | grep -q '^dn: OU=<%= @users_ou %>'; then
+   echo "Samba AD database seems already configured !"
    exit 0
 fi
 

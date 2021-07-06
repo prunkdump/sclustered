@@ -13,13 +13,14 @@ binmode(STDOUT,':encoding(UTF-8)');
 sub displayUsage {
    my $callerProgram = basename($0);
    print("usage : $callerProgram <base_dn> <base|sub|one> <user|group|ou|all> <search_cond> [attribute1] [attribute2] ...\n");
+   print("For no conditionnal search, use '()' condition.\n"); 
    exit(0);
 }
 
 ##############
 # check args #
 ##############
-if( @ARGV < 3 ) {
+if( @ARGV < 4 ) {
   displayUsage();
 }
 
