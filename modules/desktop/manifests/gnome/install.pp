@@ -30,9 +30,10 @@ class desktop::gnome::install {
 
    # add logout button extension #
    # now in repository #
-   package { 'gnome-shell-extension-log-out-button':
-      ensure => installed,
-   }
+   # now not needed ! #
+   #package { 'gnome-shell-extension-log-out-button':
+   #   ensure => installed,
+   #}
 
    #file { '/usr/share/gnome-shell/extensions/LogOutButton@kyle.aims.ac.za':
    #   ensure => directory,
