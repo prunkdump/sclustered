@@ -356,14 +356,18 @@ sub GetSCONETStudents {
    my $parser = XML::SAX::ParserFactory->parser();
    $parser->parse(Handler => $handler, Source => { ByteStream => $sconetFile, Encoding => "$encoding" } );
 
-   # remove students not affected in classes #
-   # and save login #
+   # -> remove students not affected in classes #
+   # -> save login #
+   # -> if usedSurname is defined, replace surName #
    my %students = %MyHandler::SCONETStudents;
    
    foreach my $key (keys %students) {
       if ( ! defined($students{$key}{class}) ) {
          delete($students{$key});
       } else {
+         if( defined($students{$key}{usedSurname}) ) {
+            $students{$key}{surName} = $students{$key}{usedSurname};
+         }
          $students{$key}{login} =  getLogin( $students{$key}{surName}, $students{$key}{givenName} );
          $students{$key}{completeName} = $students{$key}{surName}. " " . $students{$key}{givenName};
       }
@@ -1292,6 +1296,7 @@ print("----------------------------\n");
 #######################
 package MyHandler;
 use base qw(XML::SAX::Base);
+use Text::Unidecode;
 
 %MyHandler::SCONETStudents = ();
 @MyHandler::currentElement = ();
@@ -1386,6 +1391,10 @@ sub characters {
    if ( @currentElement[-2..-1] ~~ ["ELEVE","NOM_DE_FAMILLE"]  ) {
       $SCONETStudents{$currentID}{surName} = defined($SCONETStudents{$currentID}{surName}) ? $SCONETStudents{$currentID}{surName} . $data->{Data} : $data->{Data};
    }
+   # inside NOM_USAGE #
+   if ( @currentElement[-2..-1] ~~ ["ELEVE","NOM_USAGE"]  ) {
+      $SCONETStudents{$currentID}{usedSurname} = defined($SCONETStudents{$currentID}{usedSurname}) ? $SCONETStudents{$currentID}{usedSurname} . $data->{Data} : $data->{Data};
+   }
    # inside PRENOM #
    elsif ( @currentElement[-2..-1] ~~ ["ELEVE","PRENOM"] ) {
       $SCONETStudents{$currentID}{givenName} = defined($SCONETStudents{$currentID}{givenName}) ? $SCONETStudents{$currentID}{givenName} . $data->{Data} : $data->{Data};
@@ -1396,7 +1405,7 @@ sub characters {
    }
    # inside MEL #
    elsif ( @currentElement[-2..-1] ~~ ["ELEVE","MEL"] ) {
-      $SCONETStudents{$currentID}{mail} = defined($SCONETStudents{$currentID}{mail}) ? $SCONETStudents{$currentID}{mail} . lc($data->{Data}) : lc($data->{Data});
+      $SCONETStudents{$currentID}{mail} = defined($SCONETStudents{$currentID}{mail}) ? $SCONETStudents{$currentID}{mail} . lc(unidecode($data->{Data})) : lc(unidecode($data->{Data}));
    }
    # inside TEL_PORTABLE #
    elsif ( @currentElement[-2..-1] ~~ ["ELEVE","TEL_PORTABLE"] ) {
