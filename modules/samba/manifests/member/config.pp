@@ -13,4 +13,10 @@ class samba::member::config {
       content => template('samba/member_smb.conf.erb'),
       mode => '0644',
    }
+
+   file {'/etc/krb5.conf':
+      ensure => file,
+      content => template('samba/member_krb5.conf.erb'),
+      mode => '0644',
+   }
 }
