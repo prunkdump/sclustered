@@ -8,24 +8,39 @@
 #                                              #
 # Running this script on a already running DC  #
 # can break the domain !                       #
+# So this script start by checking that the    #
+# domain is already provisionned.              #
+# But also that the AD structure is not        #
+# already created by this script itself.       #
 ################################################
 
+# check if the SAM ldb file is present #
+if [ ! -e "<%= @private_path %>/sam.ldb"]; then
+   echo "Cannot find SAM database ldb file ! Does the domain is provisionned ?"
+   exit 1
+fi
 
-# unsure samba domain is provisionned and ldbsearch works #
-# if not, don't go further as we can't check if the script #
-# has already be run #
-samSearch=$(ldbsearch --show-binary -H <%= @private_path %>/sam.ldb -s base -b OU=<%= @users_ou %>,<%= @base_dn %> ou)
+# ensure ldbsearch works, search the root #
+ldbsearch --show-binary -H <%= @private_path %>/sam.ldb -s base -b <%= @base_dn %> dn
 if [ "$?" -ne "0" ]; then
-   echo "Failed to search on the AD database ! Does the domain is provisionned ?"
-   exit 0
+   echo "Cannot find AD database base DN : <%= @base_dn %>"
+   echo "Does the domain is provisionned ?"
+   exit 1
 fi
 
-# check if samba AD already configured #
-# by this script. We check the main users OU #
-if echo "$samSearch" | grep -q '^dn: OU=<%= @users_ou %>'; then
-   echo "Samba AD database seems already configured !"
-   exit 0
+# now search for the users OU to know if this script #
+# was already be run #
+samSearch=$(ldbsearch --show-binary -H <%= @private_path %>/sam.ldb -s base -b OU=<%= @users_ou %>,<%= @base_dn %> ou)
+if [ "$?" -eq "0" ]; then
+   if echo "$samSearch" | grep -q '^dn: OU=<%= @users_ou %>'; then
+      echo "Samba AD database seems already configured !"
+      exit 1
+   fi
 fi
+
+#################################
+# OK now configure the database #
+#################################
 
 # parse args #
 if [ $# != 1 ]; then
