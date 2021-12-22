@@ -17,7 +17,8 @@
    dedicated keytab file = /etc/krb5.keytab
    kerberos method = secrets and keytab
    winbind refresh tickets = yes
-   allow trusted domains = no
+   # need to be disabled, see bugs, prevent winbind to start #
+   allow trusted domains = yes
 
    log file = /var/log/samba/%m.log
    log level = 1

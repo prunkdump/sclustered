@@ -23,6 +23,12 @@ class debbug::client {
       subscribe => File_option['start_puppet_after_network'],
    }
 
+   # BUG winbind fail to start when trusted domain is disabled #
+   #
+   # see : modules/samba/templates/member_smb.conf.erb
+   #
+   # follow :
+   # https://bugzilla.samba.org/show_bug.cgi?id=14899
 
    # BUG winbind fail on suspend #
    # BUG dhclient does not update timers on suspend #
