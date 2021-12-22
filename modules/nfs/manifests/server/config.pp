@@ -36,6 +36,18 @@ class nfs::server::config {
       ensure => present,
    }
 
+   # gssproxy conf #
+   file { '/etc/gssproxy/24-nfs-server.conf':
+      ensure => present,
+      source => 'puppet:///modules/nfs/24-nfs-server.conf',
+      mode => '0644',
+   }
+
+   file { '/etc/gssproxy/99-nfs-client.conf':
+      ensure => present,
+      source => 'puppet:///modules/nfs/99-nfs-client.conf',
+      mode => '0644',
+   }
 
    ####################
    # samba spn config #
