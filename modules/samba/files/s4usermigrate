@@ -10,11 +10,12 @@ function usage()
 {
     binName=$(basename $0)
     echo "usage: $binName [-n] [-l] <user_name> <target_server>"
-    echo "       $binName [-n] [-l] -c <users_class> <target_server>"
+    echo "       $binName [-n] [-l] [-s] -c <users_class> <target_server>"
     echo "       $binName [-n] -u"
     echo "   -n : non interractive"
     echo "   -l : migrate later"
     echo "   -u : update all pending migrations now"
+    echo "   -s : split the class by migrating the half"
     exit 0
 }
 
@@ -27,7 +28,7 @@ while [[ -n "$@" ]]; do
 
     # test option #
     OPTIND=1
-    while getopts ":hnlcu" opt; do
+    while getopts ":hnlcus" opt; do
 	case $opt in
             n)
                 optNoInterractive='true'
@@ -40,6 +41,9 @@ while [[ -n "$@" ]]; do
                 ;;
             u)
                 optUpdatePending='true'
+                ;;
+            s)
+                optSplit='true'
                 ;;
 	    h)
 		usage
@@ -199,7 +203,12 @@ if [ "$optBaseClass" == "true" ]; then
    fi
 
    # get all the users #
-   migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory)
+   migrateUsers=''
+   if [ "$optSplit" == "true" ]; then
+      migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory | sed 'n;d')
+   else
+      migrateUsers=$(s4ldbsearch $baseClassDN,$baseDN sub user '()' cn unixHomeDirectory)
+   fi
 
    # check if we have users #
    if [ -z "$migrateUsers" ]; then
