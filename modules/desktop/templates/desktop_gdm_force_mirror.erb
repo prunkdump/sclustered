@@ -26,7 +26,7 @@ get_serial_number () {
    charEDID=''
 
    IFS=''
-   while read line; do
+   while read -r line; do
       line=$(echo $line | cut '-d ' -f2-)
       hexPart=$(echo $line | sed 's/ >.*//')
       charPart=$(echo $line | sed 's/^.* >\(.*\)</\1/')
@@ -71,7 +71,7 @@ get_serial_number () {
 
    serialNumber=''
 
-   while read -n3 currHex; do
+   while read -r -n3 currHex; do
       currHex=${currHex% }
       if [[ "0x${currHex}" -ge "0x20" ]]; then
          serialNumber="${serialNumber}${charEDID:0:1}"
@@ -153,7 +153,7 @@ echo '  <configuration>
 
    # creates outputs #
    IFS=''
-   while read line; do
+   while read -r line; do
        outputName=$(echo "$line" | cut -d, -f1)
        vendor=$(echo "$line" | cut -d, -f2)
        product=$(echo "$line" | cut -d, -f3)
@@ -226,7 +226,7 @@ fi
 connectedScreens=''
 kernelEdidParams=''
 
-while read line; do
+while read -r line; do
    stateFile="${line}/status"
    edidFile="${line}/edid"
    screenState=$(cat $stateFile)
@@ -313,7 +313,7 @@ fi
 connectedScreensWithRate=''
 
 IFS=''
-while read line; do
+while read -r line; do
    outputName=$(echo "$line" | cut -d, -f1)
    vendor=$(echo "$line" | cut -d, -f2)
    product=$(echo "$line" | cut -d, -f3)
@@ -322,7 +322,7 @@ while read line; do
 
       # search for freq #
       outputFound="false"
-      while read randrLine; do
+      while read -r randrLine; do
          if echo $randrLine | grep -q "^ "; then
 
             # mode line #
@@ -353,7 +353,7 @@ unset IFS
 sortedOutputList=''
 sortedKernelEdidParams=''
 IFS=''
-while read randrLine; do
+while read -r randrLine; do
    if echo $randrLine | grep -q "^.* connected "; then
       randrOutputName=$(echo $randrLine | cut -d' ' -f1)
 
@@ -405,7 +405,7 @@ echo "-   Outputs found    -"
 echo "----------------------"
 
 IFS=''
-while read line; do
+while read -r line; do
    outputName=$(echo "$line" | cut -d, -f1)
    vendor=$(echo "$line" | cut -d, -f2)
    product=$(echo "$line" | cut -d, -f3)
