@@ -49,6 +49,14 @@ class apt::client::config {
       mode => '0644',
    }
 
+   # allow suite change #
+   file { '01allowreleasesuitechange':
+      path => '/etc/apt/apt.conf.d/01allowreleasesuitechange',
+      ensure => present,
+      source => "puppet:///modules/apt/01allowreleasesuitechange",
+      mode => '0644',
+   }
+
    ################
    # apt pinnings #
    ################
