@@ -55,7 +55,7 @@ fi
 s4shareadd ${resourceDirName,,} $newStudentClassName:$teachersClassName 1750,g:$teachersGroupName:rwx -n $resourceDirName
 
 #create shared share
-s4shareadd ${sharedDirName,,} $newStudentClassName:$teachersClassName g:$newStudentClassGroup:rwx,g:$teachersGroupName:rwx,d:g::r-x,d:g:$teachersGroupName:rwx -n $sharedDirName
+s4shareadd ${sharedDirName,,} $newStudentClassName:$teachersClassName g:$newStudentClassGroup:rwx,g:$teachersGroupName:rwx,d:u::rwx,d:g::r-x,d:g:$teachersGroupName:rwx -n $sharedDirName
 
 #create test folder
-s4shareadd ${testDirName,,} $newStudentClassName:$teachersClassName g:$newStudentClassGroup:rwx,g:$teachersGroupName:rwx,d:g::---,d:g:$newStudentClassGroup:---,d:o::---,d:g:$teachersGroupName:rwx -n $testDirName
+s4shareadd ${testDirName,,} $newStudentClassName:$teachersClassName g:$newStudentClassGroup:rwx,g:$teachersGroupName:rwx,d:u::rwx,d:g::---,d:g:$newStudentClassGroup:---,d:o::---,d:g:$teachersGroupName:rwx -n $testDirName
