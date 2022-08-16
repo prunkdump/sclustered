@@ -27,7 +27,7 @@ puppet::fai_locale:
    xkboptions: 'ctrl:nocaps,terminate:ctrl_alt_bksp'
 apt::distribution: bullseye
 apt::debian_reps:
-   - 'http://ftp.debian.org/debian'
+   - 'http://deb.debian.org/debian'
 apt::sources:
    base: ['http://debian','main contrib non-free']
    security: ['http://security.debian.org/debian-security','main','bullseye-security']
