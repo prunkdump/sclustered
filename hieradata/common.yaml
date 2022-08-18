@@ -30,7 +30,7 @@ apt::debian_reps:
    - 'http://deb.debian.org/debian'
 apt::sources:
    base: ['http://debian','main contrib non-free']
-   security: ['http://security.debian.org/debian-security','main','bullseye-security']
+   security: ['http://debian-security','main','bullseye-security']
 apt::autoupdates:
    - origin=Debian,codename=${distro_codename},label=Debian
    - origin=Debian,codename=${distro_codename},label=Debian-Security
