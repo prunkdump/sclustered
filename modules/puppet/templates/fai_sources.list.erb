@@ -1,8 +1,8 @@
-# Build the nfsroot with the CDN apt service
+# Build the nfsroot with the first apt source
 # Using the apt cacher server may cause problem if the server is not ready
 
 # debian 
-deb http://deb.debian.org/debian <%= @fai_distribution %> main contrib non-free
+deb <%= @apt_debian_reps[0] %> <%= @fai_distribution %> main contrib non-free
 
 # security #
 deb http://security.debian.org/debian-security <%= @fai_distribution %>-security main contrib non-free

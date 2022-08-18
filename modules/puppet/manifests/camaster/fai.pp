@@ -5,8 +5,6 @@ define puppet::camaster::fai::debootstrap::conf ($base_fai_conf, $fai_distributi
 
    # class variables #   
    $apt_debian_reps = $puppet::camaster::fai::apt_debian_reps 
-   $apt_proxy_host = $puppet::camaster::fai::apt_proxy_host
-   $apt_proxy_port = $puppet::camaster::fai::apt_proxy_port
    $fai_root_password = $puppet::camaster::fai::fai_root_password
 
    # base directories #
@@ -52,6 +50,10 @@ define puppet::camaster::fai::debootstrap::conf ($base_fai_conf, $fai_distributi
 ########################
 define puppet::camaster::fai::debootstrap ( $debootname = $title, $params ) {
 
+   # class variables #
+   $apt_proxy_host = $puppet::camaster::fai::apt_proxy_host
+   $apt_proxy_port = $puppet::camaster::fai::apt_proxy_port
+
    #  base conf path #
    $fai_distribution = $params[$debootname][0]
    $fai_arch = $params[$debootname][1]
@@ -75,6 +77,13 @@ define puppet::camaster::fai::debootstrap ( $debootname = $title, $params ) {
    file { "/srv/fai/nfsroot-${fai_distribution}-${fai_arch}":
       ensure => directory,
       require => Exec["fai-setup -e -C $base_conf_path"],
+   }
+
+   file { "/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/etc/apt/sources.list":
+      ensure => file,
+      content => template('puppet/fai_nfsroot_sources.list.erb'),
+      mode => '0644',
+      require => [Exec["fai-setup -e -C $base_conf_path"],File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}"]],
    }
 }
 
