@@ -6,6 +6,7 @@ class puppet::params {
    $compiler_only = false
    $enable_fai = true 
    $fai_pxe_finename = 'fai/pxelinux.0'
+   $fai_pxe_efi_filename = 'fai/syslinux.efi'
    $fai_loguser = 'fai'
    $fai_root_password = '$1$kBnWcO.E$djxB128U7dMkrltJHPf6d1' 
    $fai_debootstraps = {}

@@ -32,6 +32,7 @@ class dhcp::params {
    #only puppet ca master can make FAI
    $pxe_server = $::puppet::casrv_dns
    $pxe_filename = $::puppet::fai_pxe_finename
+   $pxe_efi_filename = $::puppet::fai_pxe_efi_filename
    $ntp_servers = ["${::hostname}"]
    $options = {}
 

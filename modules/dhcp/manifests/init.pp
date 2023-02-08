@@ -9,6 +9,7 @@ class dhcp (
    $domain_name_servers = $dhcp::params::domain_name_servers,
    $pxe_server = $dhcp::params::pxe_server,
    $pxe_filename = $dhcp::params::pxe_filename,
+   $pxe_efi_filename = $dhcp::params::pxe_efi_filename,
    $ntp_servers = $dhcp::params::ntp_servers,
    $options = $dhcp::params::options,
    $default_network = $dhcp::params::default_network,

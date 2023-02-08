@@ -13,11 +13,22 @@ subnet <%= @network %> netmask <%= @netmask %> {
    option domain-name-servers <% @domain_name_servers.each_index do |dnsidx| -%>
 <% if dnsidx != 0 -%>, <% end %><%= @domain_name_servers[dnsidx] %><% end %>;
 <% end -%>
-<% if @pxe_server and @pxe_filename -%>
-
+<% if @pxe_server and @pxe_filename-%>
+<% if @pxe_efi_filename -%>
+   next-server <%= @pxe_server %>;
+   if option architecture-type = 00:09 {
+      filename "<%= @pxe_efi_filename %>";
+   } elsif option architecture-type = 00:07 {
+      filename "<%= @pxe_efi_filename %>";
+   } elsif option architecture-type = 00:06 {
+      filename "<%= @pxe_efi_filename %>";
+   } else {
+      filename "<%= @pxe_filename %>";
+   }
+<% else -%>
    next-server <%= @pxe_server %>;
    filename "<%= @pxe_filename %>";
-
+<% end -%>
 <% end -%>
 <% if ! @ntp_servers.empty? -%>
    option ntp-servers <% @ntp_servers.each_index do |ntpidx| -%>

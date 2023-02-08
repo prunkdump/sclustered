@@ -3,6 +3,8 @@
 #----------------
 include "/etc/dhcp/conf/02s4_class.conf";
 
+# option used for PXE clients #
+option architecture-type code 93 = unsigned integer 16;
 
 #########################
 # MAIN NETWORK PARAMETERS

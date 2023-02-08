@@ -226,6 +226,13 @@ class puppet::camaster::fai {
       require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
+   file {'/srv/fai/config/disk_config/FAIBASE_EFI':
+      ensure => file,
+      source => 'puppet:///modules/puppet/disk_config_FAIBASE_EFI',
+      mode => '0644',
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
+   }
+
   
    # locale #
    file { '/srv/fai/config/debconf/LOCALE':
@@ -244,7 +251,7 @@ class puppet::camaster::fai {
 
    file { '/srv/fai/config/class/LOCALE.var':
       ensure => file,
-      content => template('puppet/package_LOCALE.erb'),
+      content => template('puppet/class_LOCALE.var.erb'),
       mode => '0755',
       require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
