@@ -1068,6 +1068,15 @@ if( ! open($ldifFile, ">:encoding(UTF-8)", "/tmp/$ldifFileName") ) {
 }
 
 
+##############################################################################################
+#                                ! Step dependencies !                                       #
+# CREATE CLASSES -> before -> CREATE USERS (may they are members of the the new classes)     #
+# CREATE CLASSES -> before -> MOVE USERS (may they are moved to the new classes)             #
+# DELETE USERS -> before -> CREATE USERS (may they may use the same login)                   #
+# MOVE USERS -> before -> DELETE CLASSES (may the user in the class not need to be deleted)  #
+##############################################################################################
+
+
 #################
 # DEL students  #
 # FIRST !!!!!   #
@@ -1078,16 +1087,6 @@ if( $deleteStudents ) {
       # delete student #
       doUpdate("--- Deleting student $LDBStudents[$idx]{login} ---",
                "s4studentdel $LDBStudents[$idx]{login}");
-   }
-}
-
-##################
-# delete classes #
-##################
-if( $deleteStudents ) {
-   foreach my $class (@deleteClasses) {
-      doUpdate("--- Deleting class $class ---",
-               "s4classdel -f $class");
    }
 }
 
@@ -1165,6 +1164,17 @@ foreach my $key (@moveKeys) {
    # move student #
    doUpdate("--- Moving student $SCONETStudents{$key}{login} to class $SCONETStudents{$key}{class} ---",
             "s4studentmove $SCONETStudents{$key}{login} $SCONETStudents{$key}{class}");
+}
+
+
+##################
+# delete classes #
+##################
+if( $deleteStudents ) {
+   foreach my $class (@deleteClasses) {
+      doUpdate("--- Deleting class $class ---",
+               "s4classdel -f $class");
+   }
 }
 
 
