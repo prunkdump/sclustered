@@ -14,6 +14,11 @@ class samba::member::install {
       ensure => installed,
    }
 
+
+   package { 'systemd-timesyncd':
+      ensure => installed,
+   }
+
    # quota tools #
    # NOT NEEDED
    #package { ['quota','quotatool']:

@@ -31,6 +31,11 @@ class samba::member::service {
    #   enable => true,
    #}
 
+   service { 'systemd-timesyncd':
+      ensure => running,
+      enable => true,
+   }
+
    # BUGGY
    # start winbind if needed #
    if $disable_nss == false or $disable_pam == false {
