@@ -1,7 +1,8 @@
-# Build the nfsroot with the apt server 
+# Build the nfsroot with the first apt source
+# Using the apt cacher server may cause problem if the server is not ready
 
 # debian 
-deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/debian/ <%= @fai_distribution %> main contrib non-free
+deb <%= @apt_debian_reps[0] %> <%= @fai_distribution %> main contrib non-free
 
 # security #
-deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/security.debian.org/ <%= @fai_distribution %>/updates main contrib non-free
+deb http://security.debian.org/debian-security <%= @fai_distribution %>-security main contrib non-free

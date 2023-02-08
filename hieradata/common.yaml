@@ -15,7 +15,7 @@ wine::serverpath: /s4shares/wine
 wine::winersync_password: 'is!wineP@ss'
 puppet::puppetcarsync_password: 'oi-wm)tr!yu'
 puppet::fai_debootstraps:
-   fai-buster-amd64: [buster,amd64]
+   fai-bullseye-amd64: [bullseye,amd64]
 puppet::fai_locale:
    main: en_US.UTF-8
    task: english
@@ -25,15 +25,16 @@ puppet::fai_locale:
    xkblayout: en
    xkbvariant: US
    xkboptions: 'ctrl:nocaps,terminate:ctrl_alt_bksp'
-apt::distribution: buster
+apt::distribution: bullseye
 apt::debian_reps:
-   - 'http://ftp.debian.org/debian'
+   - 'http://deb.debian.org/debian'
 apt::sources:
    base: ['http://debian','main contrib non-free']
-   security: ['http://security.debian.org/debian-security','main','buster/updates']
+   security: ['http://debian-security','main','bullseye-security']
 apt::autoupdates:
    - origin=Debian,codename=${distro_codename},label=Debian
    - origin=Debian,codename=${distro_codename},label=Debian-Security
+   - origin=Debian,codename=${distro_codename}-security,label=Debian-Security
 apt::server::autoupdate_times:
    - '3:00'
    - '4:00'

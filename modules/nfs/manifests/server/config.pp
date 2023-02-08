@@ -13,6 +13,8 @@ class nfs::server::config {
    # get samba params #   
    include samba
    $samba_domain = $::samba::domain
+   $base_dn = $::samba::base_dn
+   $private_path = $::samba::private_path
 
    ########################
    # configure nfs server #
@@ -36,15 +38,28 @@ class nfs::server::config {
       ensure => present,
    }
 
+   # gssproxy conf #
+   file { '/etc/gssproxy/24-nfs-server.conf':
+      ensure => present,
+      source => 'puppet:///modules/nfs/24-nfs-server.conf',
+      mode => '0644',
+   }
+
+   file { '/etc/gssproxy/99-nfs-client.conf':
+      ensure => present,
+      source => 'puppet:///modules/nfs/99-nfs-client.conf',
+      mode => '0644',
+   }
 
    ####################
    # samba spn config #
    ####################
 
-   # create the nfs keytab #
+   # create the nfs keytab with strong enctypes #
    exec{ 'create_nfs_keytab':
       command => "samba-tool user add nfs-$hostname --random-password && \
                   samba-tool spn add nfs/${hostname}.${samba_domain} nfs-${hostname} && \
+                  echo 'dn: CN=nfs-${hostname},CN=Users,${base_dn}\nchangetype: modify\nadd: msDS-SupportedEncryptionTypes\nmsDS-SupportedEncryptionTypes: 31' | ldbmodify -H ${private_path}/sam.ldb && \
                   samba-tool domain exportkeytab /etc/krb5.keytab --principal=nfs/${hostname}.${samba_domain}",
       path => '/usr/bin:/usr/sbin:/bin',
       unless => "klist -k /etc/krb5.keytab | grep 'nfs/${hostname}.${samba_domain}'",

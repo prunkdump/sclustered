@@ -88,12 +88,15 @@ class extrapkg (
    ###############
    # flashplayer #
    ###############
-   if 'flashplayer' in $apps {
-      $flashplayer_status = 'present'
-   }
-   else {
-      $flashplayer_status = 'absent'
-   }
+
+   # now disabled !
+   #if 'flashplayer' in $apps {
+   #   $flashplayer_status = 'present'
+   #}
+   #else {
+   #  $flashplayer_status = 'absent'
+   #}
+   $flashplayer_status = 'absent'
    
    file { '/usr/sbin/fireflashupdate':
       ensure => $flashplayer_status,

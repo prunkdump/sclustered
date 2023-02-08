@@ -1,0 +1,7 @@
+# use the apt cacher server during FAI installation #
+
+# debian 
+deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/debian/ <%= @fai_distribution %> main contrib non-free
+
+# security #
+deb http://<%= @apt_proxy_host %>:<%= @apt_proxy_port %>/debian-security/ <%= @fai_distribution %>-security main contrib non-free

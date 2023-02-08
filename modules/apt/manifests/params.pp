@@ -8,11 +8,11 @@ class apt::params {
    $srv_dns = 'apt'
    $directs = []
    $remaps = {}
-   $debian_reps = ['http://ftp.debian.org/debian']
+   $debian_reps = ['http://deb.debian.org/debian']
    $distribution = 'stable'
    $sources = {
       base => ['http://debian','main contrib non-free'],
-      security => ['http://security.debian.org/debian-security','main','stable/updates'],
+      security => ['http://debian-security','main','bullseye-security'],
    }
    $pinnings = {}
    $keys = []
