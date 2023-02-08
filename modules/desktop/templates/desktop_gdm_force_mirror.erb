@@ -3,10 +3,6 @@
 # delay to wait device power on #
 sleep 5
 
-# get gdm uid #
-gdmUid=$(id -u Debian-gdm)
-
-
 function ask_yes_or_no() {
    read -p "$1 ([y]es or [N]o): "
    case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
@@ -127,9 +123,24 @@ get_binary_product () {
    echo "0x${mainID}${subID}"
 }
 
+
+exit_with_error () {
+
+   # ensure config file is absent #
+   # so the script will be called again later #
+   rm -f /var/lib/gdm3/.config/monitors.xml
+
+   # create an empty logon script #
+   echo '#!/bin/bash
+
+' > /var/lib/gdm3/.config/monitors.xml.sh
+   chmod 755 /var/lib/gdm3/.config/monitors.xml.sh
+
+   # exit #
+   exit 0
+}
+
 go_out () {
-   touch /var/lib/gdm3/.config/monitors.xml
-   touch /var/lib/gdm3/.config/monitors.xml.sh
    chmod 755 /var/lib/gdm3/.config/monitors.xml.sh
    exit 0
 }
@@ -137,10 +148,16 @@ go_out () {
 
 add_screen_config () {
 
-   if [ -z "$2" ]; then
-      confLines=$(echo -e "$1")
+   # the target file must be present #
+   if [ ! -e "$1" ]; then
+      return
+   fi
+
+   # if $3 is given, do it in reverse order #
+   if [ -z "$3" ]; then
+      confLines=$(echo -e "$2")
    else
-      confLines=$(echo -e "$1" | tac)
+      confLines=$(echo -e "$2" | tac)
    fi
 
    # configuration header #
@@ -149,7 +166,7 @@ echo '  <configuration>
       <x>0</x>
       <y>0</y>
       <scale>1</scale>
-      <primary>yes</primary>' >> /var/lib/gdm3/.config/monitors.xml
+      <primary>yes</primary>' >> "$1"
 
    # creates outputs #
    IFS=''
@@ -173,14 +190,14 @@ echo '  <configuration>
           <height>${screenHeight}</height>
           <rate>${rate}</rate>
         </mode>
-      </monitor>" >> /var/lib/gdm3/.config/monitors.xml
+      </monitor>" >> "$1"
       fi
    done <<< "$confLines"
    unset IFS
 
    # configuration footer #
    echo '    </logicalmonitor>
-  </configuration>' >> /var/lib/gdm3/.config/monitors.xml
+  </configuration>' >> "$1"
 }
 
 
@@ -199,7 +216,7 @@ mkdir -p /usr/lib/firmware/edid
 # get def #
 ###########
 if [ ! -e /var/lib/gdm3/.config/monitors.xml.def ]; then
-   go_out
+   exit_with_error
 fi
 
 ###############
@@ -216,7 +233,7 @@ defLine=$(head -n 1 /var/lib/gdm3/.config/monitors.xml.def)
 screenWidth=$(echo "$defLine" | cut '-dx' -f1)
 screenHeight=$(echo "$defLine" | cut '-dx' -f2)
 if [ -z "$screenWidth" ] || [ -z "$screenWidth" ]; then
-   go_out
+   exit_with_error
 fi
 
 
@@ -224,6 +241,7 @@ fi
 # search for connected screens #
 ################################
 connectedScreens=''
+connectedScreensCount='0'
 kernelEdidParams=''
 
 while read -r line; do
@@ -280,9 +298,46 @@ while read -r line; do
       # add result #
       if [ ! -z "$outputName" ]; then
          connectedScreens="${connectedScreens}$outputName,$vendor,$product,$serialNumber\n"
+         connectedScreensCount=$((connectedScreensCount+1))
       fi
    fi
 done < <(find /sys/class/drm | grep 'card.-')
+
+
+####################################
+# check we have at least 2 screens #
+####################################
+if [ "$connectedScreensCount" -lt "2" ]; then
+   exit_with_error
+fi
+
+
+#################################
+# get current active randR user #
+#################################
+currentDisplay='0'
+currentUser='Debian-gdm'
+
+while read -r connectedUser; do
+
+   userSession=$(echo "$connectedUser" | tr -s ' ' | cut -d' ' -f2)
+
+   # search for graphic session #
+   if echo "$userSession" | grep -q '^:[0-9]$'; then
+
+      # get user and display #
+      userSessionName=$(echo "$connectedUser" | tr -s ' ' | cut -d' ' -f1)
+      userSessionNumber=${userSession#:}
+
+      # check if current #
+      if [ "$userSessionNumber" -gt "$currentDisplay" ]; then
+         currentDisplay="$userSessionNumber"
+         currentUser="$userSessionName"
+      fi
+   fi
+done < <(who)
+
+currentUserUID=$(id -u "$currentUser")
 
 
 ####################
@@ -293,7 +348,7 @@ done < <(find /sys/class/drm | grep 'card.-')
 numTry="0"
 getRandr="false"
 while [ "$numTry" -ne "5" ] && [ "$getRandr" != "true" ]; do
-   verboseRandr=$(env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" xrandr-verbose 2>/dev/null)
+   verboseRandr=$(env DISPLAY=":$currentDisplay" XAUTHORITY="/run/user/$currentUserUID/gdm/Xauthority" xrandr-verbose 2>/dev/null)
    if [ "$?" -eq "0" ]; then
       getRandr="true"
    else
@@ -306,7 +361,7 @@ while [ "$numTry" -ne "5" ] && [ "$getRandr" != "true" ]; do
 done
 
 if [ "$getRandr" != "true" ]; then
-   exit 0
+   exit_with_error
 fi
 
 # add refresh rate to list #
@@ -393,7 +448,7 @@ kernelEdidParams="$sortedKernelEdidParams"
 echo "----------------------------"
 echo "-   Randr current state    -"
 echo "----------------------------"
-randROutput=$(env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" xrandr 2>/dev/null)
+randROutput=$(env DISPLAY=":$currentDisplay" XAUTHORITY="/run/user/$currentUserUID/gdm/Xauthority" xrandr 2>/dev/null)
 randROutput=$(echo "$randROutput" | sed "s/   ${screenWidth}x${screenHeight}\(.*\)$/\\\\033\[0;31m   ${screenWidth}x${screenHeight}\1\\\\033[0m/")
 echo -e "$randROutput"
 
@@ -427,6 +482,7 @@ if [ ! -z "$forceEdid" ]; then
    fi
 fi
 
+
 #########################
 # set kernel parameters #
 #########################
@@ -435,46 +491,58 @@ if [ ! -z "$forceEdid" ]; then
    update-grub
 fi
 
+
 #############################
 # build configuration files #
 #############################
 if [ ! -z "$connectedScreensWithRate" ]; then
 
    # create script #
-   echo "#!/bin/bash
-sleep 5" >> /var/lib/gdm3/.config/monitors.xml.sh
+   echo '#!/bin/bash
+if [ -e "/var/lib/gdm3/.config/monitors.xml.user" ]; then
+   cp /var/lib/gdm3/.config/monitors.xml.user $HOME/.config/monitors.xml
+fi
+sleep 5
+' > /var/lib/gdm3/.config/monitors.xml.sh
 
    xrandrCommand="xrandr "
 
    # echo header #
    echo '<monitors version="2">' > /var/lib/gdm3/.config/monitors.xml
+   echo '<monitors version="2">' > /var/lib/gdm3/.config/monitors.xml.user
 
    #####################################
    # create xrandr order configuration #
    #####################################
    #screensConf=$(echo -e $connectedScreensWithRate)
    #add_screen_config "$screensConf"
-   add_screen_config "$connectedScreensWithRate"
+   add_screen_config "/var/lib/gdm3/.config/monitors.xml" "$connectedScreensWithRate"
+   add_screen_config "/var/lib/gdm3/.config/monitors.xml.user" "$connectedScreensWithRate"
 
    #############################################
    # create xrandr REVERSE order configuration #
+   # only for gdm                              #
    #############################################
    #screensConf=$(echo -e $connectedScreensWithRate | tac)
    #add_screen_config "$screensConf"
-   add_screen_config "$connectedScreensWithRate" -r
+   add_screen_config "/var/lib/gdm3/.config/monitors.xml" "$connectedScreensWithRate" -r
 
    #######
    # end #
    #######
    echo '</monitors>' >> /var/lib/gdm3/.config/monitors.xml
+   echo '</monitors>' >> /var/lib/gdm3/.config/monitors.xml.user
 
    # create script #
    echo "$xrandrCommand" >> /var/lib/gdm3/.config/monitors.xml.sh
 fi
 
+######################
 # execute now for :0 #
-env DISPLAY=':0' XAUTHORITY="/run/user/$gdmUid/gdm/Xauthority" $xrandrCommand
-
+######################
+if [ "$currentDisplay" -eq "0" ]; then
+   env DISPLAY=':0' XAUTHORITY="/run/user/$currentUserUID/gdm/Xauthority" $xrandrCommand
+fi
 
 # done #
 go_out

@@ -36,6 +36,7 @@ class desktop::gnome::display {
          mode => '0644',
       }
 
+      # exec desktop_gdm_force mirror when script change or screen parameter change #
       exec { 'desktop_gdm_force_mirror_refresh':
          command => 'desktop_gdm_force_mirror',
          path => '/usr/bin:/usr/sbin:/bin',
@@ -43,6 +44,7 @@ class desktop::gnome::display {
          refreshonly => true,
       }
 
+      # exec desktop_gdm_force_mirror if setup is not successfull #
       exec { 'desktop_gdm_force_mirror_conf_file':
          command => 'desktop_gdm_force_mirror',
          path => '/usr/bin:/usr/sbin:/bin',
@@ -50,7 +52,7 @@ class desktop::gnome::display {
          require => Exec['desktop_gdm_force_mirror_refresh'],
       }
       
-
+      # exec /var/lib/gdm3/.config/monitors.xml.sh at logon #
       file { '/etc/xdg/autostart/setupxorg.desktop':
          ensure => file,
          content => "[Desktop Entry]\nType=Application\nName=avertlogon\nExec=/var/lib/gdm3/.config/monitors.xml.sh",
