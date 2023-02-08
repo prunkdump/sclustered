@@ -110,18 +110,22 @@ class debbug::client {
       enable => false,
    }
 
-   # grub failed to upgrade #
-   file { '/usr/sbin/debbug-grub-repair':
-      ensure => present,
-      source => 'puppet:///modules/debbug/debbug-grub-repair',
-      mode => '0755',
-   }
+   # bug cusps disable printers #
+   # see cups module #
 
-   exec { 'check-grub-device':
-      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-      command => '/usr/sbin/debbug-grub-repair',
-      unless => "echo 'get grub-pc/install_devices' | debconf-communicate | grep -q '/dev'",
-      require => File['/usr/sbin/debbug-grub-repair'],
-   }
+   # !!! don't works with efi !!! #
+   # grub failed to upgrade #
+   #file { '/usr/sbin/debbug-grub-repair':
+   #   ensure => present,
+   #  source => 'puppet:///modules/debbug/debbug-grub-repair',
+   #   mode => '0755',
+   #}
+   #
+   #exec { 'check-grub-device':
+   #   path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+   #   command => '/usr/sbin/debbug-grub-repair',
+   #   unless => "echo 'get grub-pc/install_devices' | debconf-communicate | grep -q '/dev'",
+   #   require => File['/usr/sbin/debbug-grub-repair'],
+   #}
 
 }

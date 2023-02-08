@@ -31,6 +31,14 @@ class cups::postconfig {
          refreshonly => true,
          subscribe => File['lpupdate','printers_list.conf'],
       }
+
+      # bug : sometimes cups disable printers #
+      # run lpupdate every hours #
+      file { '/etc/cron.hourly/lpupdate':
+         ensure => 'link',
+         target => '/usr/bin/lpupdate',
+         require => File['lpupdate','printers_list.conf'],
+      } 
    }
 }
 
