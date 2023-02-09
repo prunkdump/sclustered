@@ -1,11 +1,37 @@
 #!/bin/bash
+
+
+# get user wine profile #
 username=${USER}
 uid=$(id -u)
+
+# get current app #
 app=$1
 currDir="/run/wine/${uid}/prefixes/${app}"
 shift
+if [ ! -d "$currDir" ]; then
+   echo "Error cannot find ${app} wineprefix !"
+   echo "$currDir"
+   exit 1
+fi
 
-# update args #
+# check custom wine #
+customWineVersion=""
+if [ "$1" == "--custom-wine" ]; then
+   shift
+   customWineVersion="$1"
+   shift
+
+   # check if exist #
+   customWinePath="/wine/winebuilds/$customWineVersion"
+   if [ ! -d "$customWinePath" ]; then
+      echo "Cannot find $customWineVersion wine version !"
+      echo "$customWinePath"
+      exit 1
+   fi
+fi
+
+# update wine application args #
 for arg in "$@"; do
    newArg=$(echo $arg | sed "s|/run/wine|${currDir}|g")
    newArgs=("${newArgs[@]}" "${newArg}")
@@ -74,8 +100,18 @@ while read -r line; do
 done < "$currDir/user.reg"
 
 
-#######
-# run #
-#######
-env WINEPREFIX="$currDir" wine "${newArgs[@]}"
+############
+# run wine #
+############
 
+# custom wine ? #
+if [ ! -z "$customWineVersion" ]; then
+   export PATH="$customWinePath/bin/:$PATH"
+   export LD_LIBRARY_PATH="$customWinePath/lib/:$LD_LIBRARY_PATH"
+fi
+
+# set prefix #
+export WINEPREFIX="$currDir"
+
+# run #
+wine "${newArgs[@]}"

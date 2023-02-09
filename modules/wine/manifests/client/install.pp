@@ -7,7 +7,7 @@ class wine::client::install {
 
    if ! empty($apps) or $enabled == true {
    
-      package { ['unionfs-fuse','wine-development','wine32-development']:
+      package { ['unionfs-fuse','wine','wine64','wine32']:
          ensure => installed,
       }
 
@@ -21,7 +21,7 @@ class wine::client::install {
    }
    else {
 
-      package { ['wine-development','wine32-development']:
+      package { ['wine','wine64','wine32']:
          ensure => absent,
       }
    }
