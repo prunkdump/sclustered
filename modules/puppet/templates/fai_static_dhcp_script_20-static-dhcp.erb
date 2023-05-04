@@ -1,0 +1,12 @@
+#! /bin/bash
+
+<% if @fai_static_params -%>
+targetDomainName="<%= @samba_domain %>"
+targetNameServers="<%= @fai_static_params["nameserver"] %>"
+targetNtpServers="<%= @fai_static_params["ntpserver"] %>"
+<% end -%>
+
+# force FAI dhcp parameters #
+echo "supersede domain-name \"$targetDomainName\";" >> $target/etc/dhcp/dhclient.conf
+echo "supersede domain-name-servers $targetNameServers;" >> $target/etc/dhcp/dhclient.conf
+echo "supersede ntp-servers $targetNtpServers;" >> $target/etc/dhcp/dhclient.conf

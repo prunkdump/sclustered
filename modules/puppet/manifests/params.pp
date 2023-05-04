@@ -5,6 +5,7 @@ class puppet::params {
    $mastersrv_dns = 'puppet'
    $compiler_only = false
    $enable_fai = true 
+   $fai_static_params = undef
    $fai_pxe_finename = 'fai/pxelinux.0'
    $fai_pxe_efi_filename = 'fai/syslinux.efi'
    $fai_loguser = 'fai'

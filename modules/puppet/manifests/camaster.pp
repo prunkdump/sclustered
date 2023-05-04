@@ -1,6 +1,7 @@
 class puppet::camaster (
    $compiler_only = $puppet::compiler_only,
    $enable_fai = $puppet::enable_fai,
+   $fai_static_params = $puppet::fai_static_params,
    $fai_loguser = $puppet::fai_loguser,
    $fai_root_password = $puppet::fai_root_password,
    $fai_debootstraps = $puppet::fai_debootstraps,
@@ -11,7 +12,9 @@ class puppet::camaster (
    $casrv_dns = $puppet::casrv_dns
    $puppetcarsync_password = $puppet::puppetcarsync_password
    $mastersrv_dns = $puppet::mastersrv_dns
-   $fai_hosts = $puppet::fai_hosts #used by dhcp 
+
+   # ! used by dhcp ! #
+   $fai_hosts = $puppet::fai_hosts
 
    ####################
    # puppet ca master #

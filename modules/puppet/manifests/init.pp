@@ -4,6 +4,7 @@ class puppet (
    $mastersrv_dns = $puppet::params::mastersrv_dns,
    $compiler_only = $puppet::params::compiler_only,
    $enable_fai = $puppet::params::enable_fai,
+   $fai_static_params = $puppet::params::fai_static_params,
    $fai_pxe_finename = $puppet::params::fai_pxe_finename,
    $fai_loguser = $puppet::params::fai_loguser,
    $fai_root_password = $puppet::params::fai_root_password,

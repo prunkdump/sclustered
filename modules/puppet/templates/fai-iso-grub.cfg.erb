@@ -1,0 +1,21 @@
+## grub2 configuration
+set default="Boot OS from first partition on first disk"
+set timeout=20
+
+# make sure we can access partitions
+insmod part_msdos
+insmod part_gpt
+insmod all_video
+insmod gfxterm
+
+set gfxmode=auto
+set color_normal=white/black
+set color_highlight=red/black
+set menu_color_normal=white/black
+set menu_color_highlight=black/yellow
+
+menuentry "FAI installation : <%=@debootname%>" {
+    search --set=root --file /FAI-CD
+    linux /boot/vmlinuz ip=dhcp <% if @fai_static_params %>nameserver=<%= @fai_static_params["nameserver"] %><% end %> rd.peerdns=0 root=<% if @fai_static_params %><%= @fai_static_params["installserver"] %>:<% end %>/srv/fai/nfsroot-<%=@fai_distribution%>-<%=@fai_arch%>:vers=3 rootovl FAI_FLAGS="verbose,sshd,createvt" FAI_ACTION=install FAI_CONFIG_SRC=nfs://<%= @casrv_dns %>/srv/fai/config
+    initrd /boot/initrd.img
+}

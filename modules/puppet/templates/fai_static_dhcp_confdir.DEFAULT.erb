@@ -1,0 +1,83 @@
+#! /bin/bash
+
+<% if @fai_static_params -%>
+targetDomainName="<%= @samba_domain %>"
+targetNameServers="<%= @fai_static_params["nameserver"] %>"
+targetNtpServers="<%= @fai_static_params["ntpserver"] %>"
+<% end -%>
+
+######################
+# get PXE parameters #
+######################
+
+# mount TFTP as NFS #
+mkdir -p /mnt/tftp
+mount -t nfs puppetca:/srv/tftp /mnt/tftp
+
+# search host MAC config file on TFTP server #
+tftpConfigFile=""
+
+for networkInterfaceSysPath in /sys/class/net/*; do
+   netInterfaceMac=$(cat "$networkInterfaceSysPath/address")
+   macConfigFile=$(echo "$netInterfaceMac" | sed 's/:/-/g')
+   macConfigFile="01-${macConfigFile,,}"
+
+   if [ -e "/mnt/tftp/fai/pxelinux.cfg/$macConfigFile" ]; then
+      tftpConfigFile="/mnt/tftp/fai/pxelinux.cfg/$macConfigFile"
+      break
+   fi
+done
+
+if [ -z "$tftpConfigFile" ]; then
+   echo "No host configuration found on TFTP server !"
+   exit 1
+fi
+
+# get kernel parameters #
+pxeKernelCmdline=$(cat "$tftpConfigFile" | grep "^append ");
+pxeKernelCmdline=${pxeKernelCmdline#append }
+
+if [ -z "$pxeKernelCmdline" ]; then
+   echo "Cannot find TFTP kernel parameters !"
+   exit 1
+fi
+
+# get hostname #
+targetHostname=""
+for option in $pxeKernelCmdline; do
+   if echo "$option" | grep -q '^hostname='; then
+      targetHostname=${option#hostname=}
+   fi
+done
+
+if [ -z "$targetHostname" ]; then
+   echo "Can't find hostname in TFTP kernel parameters !"
+   exit 1
+fi
+
+# remove hostname from cmdline #
+pxeKernelCmdline=$(echo "$pxeKernelCmdline" | sed "s/hostname=$targetHostname//")
+
+
+#########################
+# force host parameters #
+#########################
+
+# set hostname #
+hostname "$targetHostname"
+domainname "$targetDomainName"
+
+# correct dracut settings (used by FAI scripts) #
+echo "search $targetDomainName" > /run/initramfs/state/etc/resolv.conf
+for targetNameServer in $targetNameServers; do
+   echo "nameserver $targetNameServers" >> /run/initramfs/state/etc/resolv.conf
+done
+
+# force FAI dhcp parameters #
+echo "supersede domain-name \"$targetDomainName\";" >> /usr/share/fai/dhclient-fai.conf
+echo "supersede domain-name-servers $targetNameServers;" >> /usr/share/fai/dhclient-fai.conf
+echo "supersede ntp-servers $targetNtpServers;" >> /usr/share/fai/dhclient-fai.conf
+
+# correct kernel cmdline (used by FAI scripts) #
+echo "$pxeKernelCmdline" > /tmp/fai/correctedCmdline
+mount -o ro,bind /tmp/fai/correctedCmdline /proc/cmdline

@@ -50,6 +50,16 @@ define puppet::camaster::fai::debootstrap::conf ($base_fai_conf, $fai_distributi
 ########################
 define puppet::camaster::fai::debootstrap ( $debootname = $title, $params ) {
 
+   # static conf ? # 
+   $fai_static_params = $puppet::camaster::fai::fai_static_params
+   if( $fai_static_params ) {
+      $fai_static_params_files_status = file
+   } else {
+      $fai_static_params_files_status = absent
+   }
+   $samba_domain = $puppet::camaster::fai::samba_domain
+   $casrv_dns = $puppet::camaster::fai::casrv_dns
+  
    # class variables #
    $apt_proxy_host = $puppet::camaster::fai::apt_proxy_host
    $apt_proxy_port = $puppet::camaster::fai::apt_proxy_port
@@ -85,6 +95,39 @@ define puppet::camaster::fai::debootstrap ( $debootname = $title, $params ) {
       mode => '0644',
       require => [Exec["fai-setup -e -C $base_conf_path"],File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}"]],
    }
+
+   # if static parameters, force DHCP parameters during FAI intallation #
+   # TFTP will be acceded by NFS to get host info #
+   file { "/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/var/lib/fai/config/hooks/confdir.DEFAULT":
+      ensure => $fai_static_params_files_status,
+      content => template('puppet/fai_static_dhcp_confdir.DEFAULT.erb'),
+      mode => '0755',
+      require => [Exec["fai-setup -e -C $base_conf_path"],File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}"]],
+   }
+
+   # create boot cd #
+   file { "/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd":
+      ensure => directory,
+      mode => '0755',
+      require => [Exec["fai-setup -e -C $base_conf_path"],File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}"]],
+   }
+
+   file { "/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd/grub.cfg":
+      ensure => file,
+      content => template('puppet/fai-iso-grub.cfg.erb'),
+      mode => '0644',
+      require => [Exec["fai-setup -e -C $base_conf_path"],
+                  File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}","/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd"]],
+   }
+   
+   exec { "fai-cd -f -C $base_conf_path -B -g /srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd/grub.cfg /srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd/fai-boot.iso":
+      path => '/usr/bin:/usr/sbin:/bin',
+      require => [Exec["fai-setup -e -C $base_conf_path"],
+                  File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}","/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd"]],
+      subscribe => File["/srv/fai/nfsroot-${fai_distribution}-${fai_arch}/boot-cd/grub.cfg"],
+      refreshonly => true,
+   }
+
 }
 
 ##########################
@@ -97,6 +140,9 @@ define puppet::camaster::fai::faihost (
    $fai_host_file,
    $server,
 ) {
+
+   # static conf ? # 
+   $fai_static_params = $puppet::camaster::fai::fai_static_params
 
    # get host param #
    $host_mac = $fai_hosts_hash[$host_name][0]
@@ -111,11 +157,24 @@ define puppet::camaster::fai::faihost (
    $host_deb_distribution = $fai_debootstraps_hash[$host_debootstrap][0]
    $host_deb_arch = $fai_debootstraps_hash[$host_debootstrap][1]
 
-   exec { "add_fai_conf_${host_name}":
-      command => "fai-chboot -C /etc/fai-debootstraps/fai-${host_deb_distribution}-${host_deb_arch} \
-                 -IFv -u nfs://${server}/srv/fai/config $host_mac",
-      path => '/usr/bin:/usr/sbin:/bin',
-      creates => "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename",
+   # if static parameters, add hostname to kernel cmdline #
+   if( $fai_static_params ) {
+
+      exec { "add_fai_conf_${host_name}":
+         command => "fai-chboot -C /etc/fai-debootstraps/fai-${host_deb_distribution}-${host_deb_arch} \
+                    -IFv -u nfs://${server}/srv/fai/config -k hostname=$host_name $host_mac",
+         path => '/usr/bin:/usr/sbin:/bin',
+         creates => "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename",
+      }
+
+   } else {
+
+      exec { "add_fai_conf_${host_name}":
+         command => "fai-chboot -C /etc/fai-debootstraps/fai-${host_deb_distribution}-${host_deb_arch} \
+                    -IFv -u nfs://${server}/srv/fai/config -k $host_mac",
+         path => '/usr/bin:/usr/sbin:/bin',
+         creates => "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename",
+      }
    }
 
    file { "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename":
@@ -138,6 +197,13 @@ class puppet::camaster::fai {
    include network
    include samba
    include apt
+
+   $fai_static_params = $puppet::camaster::fai_static_params
+   if( $fai_static_params ) {
+      $fai_static_params_files_status = file
+   } else {
+      $fai_static_params_files_status = absent
+   }
 
    $fai_loguser = $puppet::camaster::fai_loguser
    $fai_root_password = $puppet::camaster::fai_root_password
@@ -381,6 +447,13 @@ class puppet::camaster::fai {
       require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/scripts/S4CLIENT']],
    }
 
+   # if static parameters, ignore DHCP parameters #
+   file { '/srv/fai/config/scripts/S4CLIENT/20-static-dhcp.erb':
+      ensure => $fai_static_params_files_status,
+      content => template('puppet/fai_static_dhcp_script_20-static-dhcp.erb'),
+      mode => '0755',
+      require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/scripts/S4CLIENT']],
+   }
 
    # host base class #
    file { '/srv/fai/config/class/50-host-classes':
@@ -397,7 +470,15 @@ class puppet::camaster::fai {
       path => '/srv/fai',
       options => ['async','ro','no_subtree_check','no_root_squash'],
       require => [Package['fai-quickstart'], File['/srv/fai/config']],
-   }      
+   }
+
+   # used to access parameters without PXE # 
+   nfs::server::nfsexport { 'fai_tftp_export':
+      path => '/srv/tftp',
+      options => ['async','ro','no_subtree_check','no_root_squash'],
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
+   }     
+
    
    #############
    # fai hosts #
@@ -460,5 +541,13 @@ class puppet::camaster::fai {
       ensure => running,
       enable => true,
       require => File['/usr/sbin/fai-monitor-joind','/etc/systemd/system/fai-monitor-joind.service'],
+   }
+
+   # usb drive installer #
+   file { '/usr/sbin/fai-usb-installer':
+      ensure => file,
+      source => 'puppet:///modules/puppet/fai-usb-installer',
+      mode => '0744',
+      require => Package['fai-quickstart'],
    }
 }   

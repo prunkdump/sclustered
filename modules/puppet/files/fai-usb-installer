@@ -1,0 +1,213 @@
+#! /bin/bash
+
+function ask_yes_or_no() {
+   read -p "$1 ([y]es or [n]o): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+function ask_yes_no_exit() {
+   read -p "$1 ([y]es,  [n]o, [e]xit): "
+   case $(echo $REPLY | tr '[A-Z]' '[a-z]') in
+      y|yes) echo "yes" ;;
+      *)     echo "no" ;;
+   esac
+}
+
+function choice_or_exit() {
+   read -p "$1 (number, [e]xit): "
+   reply=$(echo $REPLY | tr '[A-Z]' '[a-z]')
+
+   if echo "$reply" | grep -q '^[1-9]$'; then
+      echo "$reply"
+   else
+      echo "exit"
+   fi
+}
+
+
+################
+# ask to start #
+################
+echo "This program will help you creating a FAI boot usb drive."
+echo "If you want to do it manually, you can find the boot images here :"
+ls -1 /srv/fai/nfsroot-*/boot-cd/fai-boot.iso
+echo " "
+
+if [ $(ask_yes_or_no "Would you like to continue ?") == "no" ]; then
+   exit 0
+fi
+
+###############################
+# ask to remove the USB drive #
+# and list devices            #
+###############################
+
+# ask #
+echo " "
+echo "Please ensure the USB drive is curently REMOVED of the computer."
+if [ $(ask_yes_no_exit "Ok ?") == "no" ]; then
+   exit 0
+fi
+
+# list current drives #
+baseDriveList=$(lsblk | sed '1d' | grep '^[a-z]' | cut -d' ' -f1)
+
+
+######################################
+# ask to insert the target USB drive #
+# and find new drive                 #
+######################################
+
+# ask to insert #
+echo " "
+echo "Please now insert the target USB drive."
+echo "Confirmation will be asked before writing to it."
+if [ $(ask_yes_no_exit "Ready ?") == "no" ]; then
+   exit 0
+fi
+
+# list current drives again #
+newDriveList=$(lsblk | sed '1d' | grep '^[a-z]' | cut -d' ' -f1)
+
+# remove all the initials drives #
+while read -r baseDrive; do
+   newDriveList=$(echo "$newDriveList" | sed "/^$baseDrive$/d")
+done <<< "$baseDriveList"
+
+# check we have only one drive #
+newDriveCount=$(echo "$newDriveList" | wc -l)
+
+if [ -z "$newDriveList" ] || [ "$newDriveCount" -eq "0" ]; then
+   echo "No inserted drive found !"
+   echo "Please try again."
+   exit 0
+fi
+
+if [ "$newDriveCount" -gt "1" ]; then
+   echo "Multiple new drives found !"
+   echo "$newDriveList"
+   echo "Please try again."
+   exit 0
+fi
+
+newDriveDevice=$(echo "$newDriveList" | tr -d '\n')
+
+# get drive information #
+newDriveSize=$(cat /sys/class/block/$newDriveDevice/size)
+newDriveSize=$((newDriveSize / 1024))
+newDriveSize=$((newDriveSize / 1024))
+newDriveSize="$newDriveSize GB"
+
+newDriveVendor=$(cat /sys/class/block/$newDriveDevice/device/vendor)
+newDriveModel=$(cat /sys/class/block/$newDriveDevice/device/model)
+
+echo " "
+echo "New drive found !"
+echo "---------------------------"
+echo " Size : $newDriveSize"
+echo " Manufacturer : $newDriveVendor"
+echo " Model : $newDriveModel"
+echo " Device : /dev/$newDriveDevice"
+echo "---------------------------"
+echo "Would you like to select this drive ?"
+echo "Confirmation will be asked before writing to it."
+if [ $(ask_yes_no_exit "Ready ?") == "no" ]; then
+   exit 0
+fi
+
+
+###################
+# choose nfsroots #
+###################
+
+# list all nfsroots #
+nfsrootList=''
+
+while read -r nfsrootName; do
+
+   # check we have iso #
+   if [ -e "/srv/fai/$nfsrootName/boot-cd/fai-boot.iso" ]; then
+      if [ -z "$nfsrootList" ]; then
+         nfsrootList="$nfsrootName"
+      else
+         nfsrootList="$nfsrootList/$nfsrootName"
+      fi
+   fi
+
+done < <(ls -1 /srv/fai | grep 'nfsroot-')
+
+# if multiple nfsroots, select #
+if echo "$nfsrootList" | grep -q '/'; then
+
+   # display the list #
+   echo " "
+   echo "Please choose the debootstrap to use :"
+
+   nfsrootNum='1'
+   for nfsrootName in $(echo "$nfsrootList" | sed 's|/| |g'); do
+      echo "$nfsrootNum) $nfsrootName"
+      nfsrootNum=$((nfsrootNum + 1))
+   done
+
+   # ask the number #
+   nfsrootNum=$(choice_or_exit "Choosen debootstrap ?")
+   if [ "$nfsrootNum" == "exit" ]; then
+      exit 0
+   fi
+
+   # check the number #
+   nfsroot=$(echo "$nfsrootList" | cut -d '/' -f "$nfsrootNum")
+   if [ -z "$nfsroot" ]; then
+      echo "Bad debootstrap number used !"
+      exit 0
+   fi
+else
+   nfsroot="$nfsrootList"
+fi
+
+bootIso="/srv/fai/$nfsroot/boot-cd/fai-boot.iso"
+if [ ! -f "$bootIso" ]; then
+   echo "Cannot find boot iso file !"
+   exit 0
+fi
+
+###########################
+# umount drive partitions #
+###########################
+for drivePartition in /dev/$newDriveDevice*; do
+   echo "Unmounting $drivePartition..."
+   umount "$drivePartition"
+done
+
+
+##################
+# write to drive #
+##################
+
+# ask #
+echo " "
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+echo "We are now ready to write the FAI boot image :"
+echo "$bootIso"
+echo " "
+echo "To the selected device :"
+echo "/dev/$newDriveDevice"
+echo " "
+echo "ARE YOU SURE YOU WANT TO CONTINUE ?"
+echo "THIS WILL ERASE ALL THE DATA IN THE TARGET DRIVE !"
+echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+if [ $(ask_yes_no_exit "Write to the drive ?") == "no" ]; then
+   exit 0
+fi
+
+# write the iso #
+echo " "
+echo "Writing to the drive..."
+dd if=$bootIso of=/dev/$newDriveDevice bs=4M && sync
+
+# done #
+echo "Done !"
+echo "You can now use this drive to make FAI installations."
