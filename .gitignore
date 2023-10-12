@@ -1,6 +1,7 @@
 auth.conf
 code
 puppet.conf
+puppetserver
 environments/production/modules
 modules/concat
 modules/stdlib
