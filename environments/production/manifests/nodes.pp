@@ -86,6 +86,7 @@ node change_to__default__ {
    }
    #class { 'virt': }
    class { 'localization': }
+   class { 'wolenable': }
 
    ###########
    # runtime #

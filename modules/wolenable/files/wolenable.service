@@ -1,0 +1,11 @@
+[Unit]
+Description=Enable Wake-on-LAN on all interfaces
+Requires=network.target
+After=network.target
+
+[Service]
+ExecStart=/usr/sbin/wolenable
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target

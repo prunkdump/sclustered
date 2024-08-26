@@ -1,0 +1,22 @@
+#! /bin/bash
+
+# get all network ineterfaces #
+for filepath in /sys/class/net/*; do
+
+   # ensure not lo #
+   ifaceName=$(basename "$filepath")
+   if [ "$ifaceName" == "lo" ]; then
+      continue
+   fi
+
+   # check WOL status #
+   wolState=$(ethtool "$ifaceName" | grep '^[[:space:]]*Wake-on: .[[:space:]]*$' | sed 's/^[[:space:]]*Wake-on: \(.\)[[:space:]]*$/\1/')
+   if [ "$?" -ne "0" ]; then
+      continue
+   fi
+
+   # if not wol g state, change #
+   if [ ! -z "$wolState" ] && [ "$wolState" != "g" ]; then
+      ethtool -s $ifaceName wol g
+   fi
+done
