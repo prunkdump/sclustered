@@ -14,7 +14,7 @@ class network::wget {
       $use_proxy = "off"
    }
 
-   # check if we need to comment option #
+   # check if we need to set option #
    if $http_proxy {
       $http_proxy_status = present
    } else {

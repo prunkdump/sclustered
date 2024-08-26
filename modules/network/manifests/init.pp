@@ -21,30 +21,30 @@ class network (
 
    # compute netmask #
    $netmask = $network_intmask? {
-      '8' => '255.255.255.0',
+      '8' => '255.0.0.0',
       '16' => '255.255.0.0',
-      '24' => '255.0.0.0'
+      '24' => '255.255.255.0'
    }
 
    # compute broadcast #
    $broadcast = $network_intmask? {
-      '8' => "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.255",
+      '8' => "${network_base_split[0]}.255.255.255",
       '16' => "${network_base_split[0]}.${network_base_split[1]}.255.255",
-      '24' => "${network_base_split[0]}.255.255.255"
+      '24' => "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.255"
    }
 
    # compute reverse zone #
    $reverse_zone = $network_intmask? {
-      '8' => "${network_base_split[2]}.${network_base_split[1]}.${network_base_split[0]}.in-addr.arpa",
+      '8' => "${network_base_split[0]}.in-addr.arpa",
       '16' => "${network_base_split[1]}.${network_base_split[0]}.in-addr.arpa",
-      '24' => "${network_base_split[0]}.in-addr.arpa",
+      '24' => "${network_base_split[2]}.${network_base_split[1]}.${network_base_split[0]}.in-addr.arpa"
    } 
 
    # compute star form #
    $starform = $network_intmask? {
-      '8' => "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.*",
+      '8' => "${network_base_split[0]}.*.*.*",
       '16' => "${network_base_split[0]}.${network_base_split[1]}.*.*",
-      '24' => "${network_base_split[0]}.*.*.*"
+      '24' => "${network_base_split[0]}.${network_base_split[1]}.${network_base_split[2]}.*"
    }
 
    # compute specials addresses #
