@@ -11,8 +11,8 @@ class apt::params {
    $debian_reps = ['http://deb.debian.org/debian']
    $distribution = 'stable'
    $sources = {
-      base => ['http://debian','main contrib non-free'],
-      security => ['http://debian-security','main','bullseye-security'],
+      base => ['http://debian','main contrib non-free non-free-firmware'],
+      security => ['http://debian-security','main','bookworm-security'],
    }
    $pinnings = {}
    $keys = []

@@ -15,7 +15,7 @@ wine::serverpath: /s4shares/wine
 wine::winersync_password: 'is!wineP@ss'
 puppet::puppetcarsync_password: 'oi-wm)tr!yu'
 puppet::fai_debootstraps:
-   fai-bullseye-amd64: [bullseye,amd64]
+   fai-bookworm-amd64: [bookworm,amd64]
 puppet::fai_locale:
    main: en_US.UTF-8
    task: english
@@ -25,12 +25,12 @@ puppet::fai_locale:
    xkblayout: en
    xkbvariant: US
    xkboptions: 'ctrl:nocaps,terminate:ctrl_alt_bksp'
-apt::distribution: bullseye
+apt::distribution: bookworm
 apt::debian_reps:
    - 'http://deb.debian.org/debian'
 apt::sources:
-   base: ['http://debian','main contrib non-free']
-   security: ['http://debian-security','main','bullseye-security']
+   base: ['http://debian','main contrib non-free non-free-firmware']
+   security: ['http://debian-security','main','bookworm-security']
 apt::autoupdates:
    - origin=Debian,codename=${distro_codename},label=Debian
    - origin=Debian,codename=${distro_codename},label=Debian-Security

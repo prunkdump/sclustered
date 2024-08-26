@@ -1,6 +1,7 @@
 class apt::client::audit {
 
    # conf file configuration #
+   # set unattented          #
    file { '01conffiles':
       path => '/etc/apt/apt.conf.d/01conffiles',
       ensure => present,
