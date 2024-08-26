@@ -7,7 +7,7 @@ class puppet::camaster::service {
 
 
    # puppet service #
-   service { 'apache2':
+   service { 'puppetserver':
       ensure => running,
       enable => true,
    }
@@ -19,7 +19,7 @@ class puppet::camaster::service {
       # ca service register #
       samba::srvregister { "$casrv_dns":
         ensure => present,
-        require => Service['apache2'],
+        require => Service['puppetserver'],
       }
 
    }
@@ -39,6 +39,6 @@ class puppet::camaster::service {
    # puppet service register #
    samba::srvregister { "$mastersrv_dns":
       ensure => present,
-      require => Service['apache2'],
+      require => Service['puppetserver'],
    }
 }

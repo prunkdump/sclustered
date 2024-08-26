@@ -10,7 +10,7 @@ class puppet::camaster::install {
    $samba_realm = $::samba::realm
    $samba_domain = $::samba::domain
 
-   package { 'puppet-master-passenger':
+   package { 'puppetserver':
       ensure => installed,
    }
 

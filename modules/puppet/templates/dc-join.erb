@@ -11,17 +11,30 @@ function puppetizeHost() {
 
    # check if the certificate is already requested #
    # we must sign before clean #
-   if puppet cert list | grep $hostFqdn; then
-      puppet cert sign $hostFqdn
+   if puppetserver ca list | grep $hostFqdn; then
+      puppetserver ca sign --certname $hostFqdn
    fi
 
    # clean cert if needed #
-   if puppet cert list --all | grep $hostFqdn; then
-      puppet cert clean $hostFqdn
+   if puppetserver ca list --all | grep $hostFqdn; then
+      puppetserver ca clean --certname $hostFqdn
+   fi
+
+   # ensure files removed #
+   if [ -e "/var/lib/puppet/ssl/certs/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/certs/${hostFqdn}.pem"
+   fi
+
+   if [ -e "/var/lib/puppet/ssl/private_keys/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/private_keys/${hostFqdn}.pem"
+   fi
+
+   if [ -e "/var/lib/puppet/ssl/public_keys/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/public_keys/${hostFqdn}.pem"
    fi
 
    # generate puppert cert #
-   puppet cert generate --dns_alt_names "'$masterdns,$masterdns.$domain'" $hostFqdn
+   puppetserver ca generate --subject-alt-names "'$masterdns,$masterdns.$domain'" --certname $hostFqdn
 
    #create client cert directories #
    ssh $hostip "mkdir -p /var/lib/puppet/ssl/certs"
@@ -31,6 +44,7 @@ function puppetizeHost() {
    scp /var/lib/puppet/ssl/certs/ca.pem $hostip:/var/lib/puppet/ssl/certs/ca.pem
    scp /var/lib/puppet/ssl/certs/$hostFqdn.pem $hostip:/var/lib/puppet/ssl/certs/$hostFqdn.pem
    scp /var/lib/puppet/ssl/private_keys/$hostFqdn.pem $hostip:/var/lib/puppet/ssl/private_keys/$hostFqdn.pem
+   scp /var/lib/puppet/ssl/crl.pem $hostip:/var/lib/puppet/ssl/crl.pem
 }
 
 
@@ -491,9 +505,8 @@ scp /var/lib/samba/private/idmap.ldb.bak $hostip:/var/lib/samba/private/idmap.ld
 
 # give puppet certificates #
 puppetizeHost
-ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nca_server = $camasterdns/' /etc/puppet/puppet.conf"
-ssh $hostip "sed -i 's/^\s*\[main\]\s*$/[main]\nserver = $masterdns/' /etc/puppet/puppet.conf"
-
+ssh $hostip "echo 'ca_server = $camasterdns' >> /etc/puppet/puppet.conf"
+ssh $hostip "echo 'server = $masterdns' >> /etc/puppet/puppet.conf"
 
 # done #
 echo " "

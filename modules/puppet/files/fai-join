@@ -87,17 +87,30 @@ function puppetizeHost() {
 
    # check if the certificate is already requested #
    # we must sign before clean #
-   if puppet cert list | grep $hostFqdn; then
-      puppet cert sign $hostFqdn
+   if puppetserver ca list | grep $hostFqdn; then
+      puppetserver ca sign --certname $hostFqdn
    fi
 
    # clean cert if needed #
-   if puppet cert list --all | grep $hostFqdn; then
-      puppet cert clean $hostFqdn
+   if puppetserver ca list --all | grep $hostFqdn; then
+      puppetserver ca clean --certname $hostFqdn
+   fi
+
+   # ensure files removed #
+   if [ -e "/var/lib/puppet/ssl/certs/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/certs/${hostFqdn}.pem"
+   fi
+
+   if [ -e "/var/lib/puppet/ssl/private_keys/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/private_keys/${hostFqdn}.pem"
+   fi
+
+   if [ -e "/var/lib/puppet/ssl/public_keys/${hostFqdn}.pem" ]; then
+      rm -f "/var/lib/puppet/ssl/public_keys/${hostFqdn}.pem"
    fi
 
    # generate puppert cert #
-   puppet cert generate $hostFqdn
+   puppetserver ca generate --certname $hostFqdn
 
    #create client cert directories #
    faiHostRootCommand "mkdir -p /var/lib/puppet/ssl/certs"

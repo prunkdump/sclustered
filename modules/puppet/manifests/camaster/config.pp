@@ -9,7 +9,7 @@ class puppet::camaster::config {
    # configure puppet #
    ####################
 
-   # dns_alt_names option #
+   # dns_alt_names option, may works even if no [main] section #
    $dns_alt_names_value = "${casrv_dns},${mastersrv_dns},${casrv_dns}.${::domain},${mastersrv_dns}.${::domain}"
 
    file_option { 'camaster_dns_alt_names':
@@ -24,24 +24,6 @@ class puppet::camaster::config {
    # ca option #
    if $compiler_only == true {
 
-      file_line { 'passenger_set_ca_certificate' :
-         path => '/etc/apache2/sites-available/puppet-master.conf',
-         line => '        SSLCARevocationFile     /var/lib/puppet/ssl/crl.pem',
-         match => 'SSLCARevocationFile',
-         ensure => present,
-         multiple => false,
-      }
-
-      # disable ca #
-      file_option { 'master_disable_ca':
-         path => '/etc/puppet/puppet.conf',
-         option => 'ca',
-         value => 'false',
-         after => '\[main\]',
-         multiple => false,
-         ensure => present,
-      }
-
       # specify ca server #
       file_option { 'master_set_camaster':
          path => '/etc/puppet/puppet.conf',
@@ -51,24 +33,64 @@ class puppet::camaster::config {
          multiple => false,
          ensure => present,
       }
-   }
 
-   else {
-
-      file_line { 'passenger_set_ca_certificate' :
-         path => '/etc/apache2/sites-available/puppet-master.conf',
-         line => '        SSLCARevocationFile     /var/lib/puppet/ssl/ca/ca_crl.pem',
-         match => 'SSLCARevocationFile',
+      # set webserver ssl parameters #
+      file_line { 'master_set_ssl_cert':
+         path => '/etc/puppet/puppetserver/conf.d/webserver.conf',
+         line => "    ssl-cert : /var/lib/puppet/ssl/certs/${hostname}.${::domain}.pem",
+         after => '\s*webserver:\s*\{',
          ensure => present,
          multiple => false,
       }
+
+      file_line { 'master_set_ssl_key':
+         path => '/etc/puppet/puppetserver/conf.d/webserver.conf',
+         line => "    ssl-key : /var/lib/puppet/ssl/private_keys/${hostname}.${::domain}.pem",
+         after => '\s*webserver:\s*\{',
+         ensure => present,
+         multiple => false,
+      }
+
+      file_line { 'master_set_ssl_ca_sert':
+         path => '/etc/puppet/puppetserver/conf.d/webserver.conf',
+         line => "    ssl-ca-cert : /var/lib/puppet/ssl/certs/ca.pem",
+         after => '\s*webserver:\s*\{',
+         ensure => present,
+         multiple => false,
+      }
+
+      file_line { 'master_set_crl':
+         path => '/etc/puppet/puppetserver/conf.d/webserver.conf',
+         line => "    ssl-crl-path : /var/lib/puppet/ssl/crl.pem",
+         after => '\s*webserver:\s*\{',
+         ensure => present,
+         multiple => false,
+      }
+
+      # disable ca service #
+      file_line { 'master_disable_ca_service':
+         path => '/etc/puppet/puppetserver/services.d/ca.cfg',
+         line => 'puppetlabs.services.ca.certificate-authority-service/certificate-authority-service',
+         ensure => absent,
+      }
+
+      file_line { 'master_enable_compiler_only_service':
+         path => '/etc/puppet/puppetserver/services.d/ca.cfg',
+         line => 'puppetlabs.services.ca.certificate-authority-disabled-service/certificate-authority-disabled-service',
+         ensure => present,
+         match => 'puppetlabs.services.ca.certificate-authority-disabled-service/certificate-authority-disabled-service',
+         multiple => false,
+      }
+
+
    }
+
 
    # base module path #
    file_option { 'camaster_basemodulepath':
       path => '/etc/puppet/puppet.conf',
       option => 'basemodulepath',
-      value => '$confdir/modules',
+      value => '$confdir/modules:/usr/share/puppet/modules',
       after => '\[main\]',
       multiple => false,
       ensure => present,
@@ -85,11 +107,11 @@ class puppet::camaster::config {
    }
 
    # ensure passenger enabled #
-   exec { 'enable_puppet_master_passenger':
-      command => 'a2ensite puppet-master',
-      path => '/usr/bin:/usr/sbin:/bin',
-      creates => '/etc/apache2/sites-enabled/puppet-master.conf',
-   }
+   #exec { 'enable_puppet_master_passenger':
+   #   command => 'a2ensite puppet-master',
+   #   path => '/usr/bin:/usr/sbin:/bin',
+   #   creates => '/etc/apache2/sites-enabled/puppet-master.conf',
+   #}
 
    # change client server to localhost #
    # OLD VERSION
