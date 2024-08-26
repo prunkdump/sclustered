@@ -209,6 +209,7 @@ class puppet::camaster::fai {
    $fai_root_password = $puppet::camaster::fai_root_password
    $fai_debootstraps = $puppet::camaster::fai_debootstraps
    $fai_hosts = $puppet::camaster::fai_hosts
+   $fai_timezone = $puppet::camaster::fai_timezone
    $fai_locale = $puppet::camaster::fai_locale
 
    $apt_debian_reps = $::apt::debian_reps

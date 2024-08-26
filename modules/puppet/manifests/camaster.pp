@@ -5,6 +5,7 @@ class puppet::camaster (
    $fai_loguser = $puppet::fai_loguser,
    $fai_root_password = $puppet::fai_root_password,
    $fai_debootstraps = $puppet::fai_debootstraps,
+   $fai_timezone = $puppet::fai_timezone,
    $fai_locale = $puppet::fai_locale   
 ) inherits puppet {
 

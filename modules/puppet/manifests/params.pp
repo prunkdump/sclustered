@@ -12,6 +12,7 @@ class puppet::params {
    $fai_root_password = '$1$kBnWcO.E$djxB128U7dMkrltJHPf6d1' 
    $fai_debootstraps = {}
    $fai_hosts = {}
+   $fai_timezone = 'Europe/London'
    $fai_locale = {
       'main' => 'en_US.UTF8',
       'task' => 'english',
