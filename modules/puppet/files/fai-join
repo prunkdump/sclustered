@@ -167,7 +167,8 @@ function joinHost() {
 
    # reboot if not already done #
    if [ "$hostRootPath" == "/target" ]; then
-      faiHostCommand "faireboot"
+      # a faiend hook wait for this file #
+      faiHostCommand 'echo fai-reboot > /tmp/fai-reboot'
    else
       # do nsupdate and launch puppet #
       sleep 1 #wait for /etc/krb5.keytab

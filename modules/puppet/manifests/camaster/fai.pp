@@ -162,7 +162,7 @@ define puppet::camaster::fai::faihost (
 
       exec { "add_fai_conf_${host_name}":
          command => "fai-chboot -C /etc/fai-debootstraps/fai-${host_deb_distribution}-${host_deb_arch} \
-                    -IFv -u nfs://${server}/srv/fai/config -k hostname=$host_name $host_mac",
+                    -Iv -f verbose,sshd,createvt,reboot -u nfs://${server}/srv/fai/config -k hostname=$host_name $host_mac",
          path => '/usr/bin:/usr/sbin:/bin',
          creates => "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename",
       }
@@ -171,7 +171,7 @@ define puppet::camaster::fai::faihost (
 
       exec { "add_fai_conf_${host_name}":
          command => "fai-chboot -C /etc/fai-debootstraps/fai-${host_deb_distribution}-${host_deb_arch} \
-                    -IFv -u nfs://${server}/srv/fai/config -k $host_mac",
+                    -Iv -f verbose,sshd,createvt,reboot -u nfs://${server}/srv/fai/config $host_mac",
          path => '/usr/bin:/usr/sbin:/bin',
          creates => "/srv/tftp/fai/pxelinux.cfg/$host_mac_filename",
       }
@@ -454,6 +454,29 @@ class puppet::camaster::fai {
       content => template('puppet/fai_static_dhcp_script_20-static-dhcp.erb'),
       mode => '0755',
       require => [Package['fai-quickstart'], File['/srv/fai/config'], File['/srv/fai/config/scripts/S4CLIENT']],
+   }
+
+   # disable chboot and savelog tasks #
+   file { '/srv/fai/config/hooks/chboot.DEFAULT':
+      ensure => file,
+      source => 'puppet:///modules/puppet/hooks_chboot.DEFAULT',
+      mode => '0755',
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
+   }
+
+   file { '/srv/fai/config/hooks/savelog.DEFAULT':
+      ensure => file,
+      source => 'puppet:///modules/puppet/hooks_savelog.DEFAULT',
+      mode => '0755',
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
+   }
+
+   # wait for server before reboot #
+   file { '/srv/fai/config/hooks/faiend.S4CLIENT':
+      ensure => file,
+      source => 'puppet:///modules/puppet/hooks_faiend.S4CLIENT',
+      mode => '0755',
+      require => [Package['fai-quickstart'], File['/srv/fai/config']],
    }
 
    # host base class #

@@ -259,7 +259,7 @@ sub big_loop() {
 
     # check if the install is finished #
     # and the client waiting to reboot #
-    if ($inp =~ /^([^\s;]+)\s+TASKBEGIN faiend/) {
+    if ($inp =~ /^([^\s;]+)\s+HOOK faiend.S4CLIENT/) {
        saveWaitingHost($ip);
     }
  

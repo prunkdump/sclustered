@@ -1,0 +1,5 @@
+#!/bin/bash
+echo "Waiting for server confirmation to reboot..."
+while [ ! -e "/tmp/fai-reboot" ]; do
+   sleep 1
+done
