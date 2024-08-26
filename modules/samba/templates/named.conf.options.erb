@@ -1,3 +1,6 @@
+// Managing acls
+acl internals { 127.0.0.0/8; <%= @network %>; };
+
 options {
 	directory "/var/cache/bind";
 
@@ -21,7 +24,7 @@ options {
 	// you will need to update your keys.  See https://www.isc.org/bind-keys
 	//========================================================================
 	dnssec-validation no;
-	auth-nxdomain no;    # conform to RFC1035
+	auth-nxdomain yes;
 	tkey-gssapi-keytab "<%= @binddlz_path %>/dns.keytab";
         minimal-responses yes;	
 
@@ -43,6 +46,12 @@ options {
 		<%= @network %>;
 	};
 
+	allow-query-cache {
+		127.0.0.1;
+		<%= @network %>;
+	};
+
+        recursion yes;
 	allow-recursion {
 		<%= @network %>; 
 	};

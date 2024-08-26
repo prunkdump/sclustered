@@ -46,6 +46,15 @@ class samba::bind_setup (
    # configure #
    #############
 
+   file_line { 'bind9_only_ipv4':
+      path => '/etc/default/named',
+      line => 'OPTIONS="-u bind -4"',
+      match => 'OPTIONS=',
+      ensure => present,
+      multiple => false,
+      require => Package['bind9'],
+   }
+
    file { '/etc/bind/named.conf.options':
       ensure => file,
       content => template('samba/named.conf.options.erb'),
@@ -90,7 +99,7 @@ class samba::bind_setup (
       subscribe => [File["$binddlz_path","$binddlz_path/dns.keytab",
                          '/etc/bind/named.conf.options','/etc/bind/named.conf.samba',"$binddlz_path/named.conf"],
                    Exec['samba_bind_dns_chown'],
-                   File_line['insert_bind_dlz']],
+                   File_line['bind9_only_ipv4','insert_bind_dlz']],
    }
   
    # update resolv.conf #
