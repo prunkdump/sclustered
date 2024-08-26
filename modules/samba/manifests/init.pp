@@ -68,10 +68,9 @@ class samba (
    $quota_student_hard = $samba::params::quota_student_hard,
    $quota_teacher_soft = $samba::params::quota_teacher_soft,
    $quota_teacher_hard = $samba::params::quota_teacher_hard,
-   $maingpo_name = $samba::params::maingpo_name,
-   $maingpo_id = $samba::params::maingpo_id,
-   $maingpo_version = $samba::params::maingpo_version,
-   $maingpo_user_extensions = $samba::params::maingpo_user_extensions
+   $gpo_logon_script_name = $samba::params::gpo_logon_script_name,
+   $gpo_logon_script_id = $samba::params::gpo_logon_script_id,
+   $gpo_logon_script_version = $samba::params::gpo_logon_script_version
 
 ) inherits samba::params {
 

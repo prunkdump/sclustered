@@ -1,0 +1,26 @@
+dn: CN={<%= @id %>},CN=Policies,CN=System,<%= @base_dn %>
+changetype: add
+objectClass: top
+objectClass: container
+objectClass: groupPolicyContainer
+displayName: <%= @name %>
+flags: 0
+versionNumber: <%= @version %>
+gPCFunctionalityVersion: 2
+gPCFileSysPath: \\<%= @domain %>\sysvol\<%= @domain %>\Policies\{<%= @id %>}
+<% if ! @user_extensions.empty? -%>
+gPCUserExtensionNames: [<% @user_extensions.each do |extension| %>{<%= extension %>}<% end %>]
+<% end -%>
+<% if ! @machine_extensions.empty? -%>
+gPCMachineExtensionNames: [<% @machine_extensions.each do |extension| %>{<%= extension %>}<% end %>]
+<% end -%>
+
+dn: CN=User,CN={<%= @id %>},CN=Policies,CN=System,<%= @base_dn %>
+changetype: add
+objectClass: top
+objectClass: container
+
+dn: CN=Machine,CN={<%= @id %>},CN=Policies,CN=System,<%= @base_dn %>
+changetype: add
+objectClass: top
+objectClass: container

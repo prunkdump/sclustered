@@ -98,14 +98,8 @@ class samba::params {
    $quota_teacher_soft = '5Go'
    $quota_teacher_hard = '6Go'
 
-   # main gpo #
-   $maingpo_name = 'logonScript'
-   $maingpo_id = '{5D552AD7-B6FC-4D69-989D-D710FB5D9643}'
-   $maingpo_version = 262144
-
-   #extensions
-   #ProcessScriptsGroupPolicy and 
-   #Scripts (Logon/Logoff) Run Restriction
-   $maingpo_user_extensions = ['{42B5FAAE-6536-11D2-AE5A-0000F87571E3}',
-                               '{40B66650-4972-11D1-A7CA-0000F87571E3}'] 
+   # logon/logoff script gpo #
+   $gpo_logon_script_name = 'logonScript'
+   $gpo_logon_script_id = '5D552AD7-B6FC-4D69-989D-D710FB5D9643'
+   $gpo_logon_script_version = 262144
 }

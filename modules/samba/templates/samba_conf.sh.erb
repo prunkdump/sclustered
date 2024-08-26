@@ -120,46 +120,6 @@ rm /tmp/Domain_Users.ldif
 #PosixfyGroup <%= @teachers_group %> OU=<%= @teachers_ou %>,OU=<%= @users_ou %>
 #PosixfyGroup <%= @students_group %> OU=<%= @students_ou %>,OU=<%= @users_ou %>
 
-###############
-# main policy #
-###############
-gpoId=<%= @maingpo_id %>
-gpoName=<%= @maingpo_name %>
-gpoVersion=<%= @maingpo_version %>
-
-# add to sam #
-echo "\
-dn: CN=$gpoId,CN=Policies,CN=System,<%= @base_dn %>
-changetype: add
-objectClass: top
-objectClass: container
-objectClass: groupPolicyContainer
-displayName: $gpoName
-flags: 0
-versionNumber: $gpoVersion
-gPCFunctionalityVersion: 2
-gPCFileSysPath: \\\\<%= @domain %>\\sysvol\\<%= @domain %>\\Policies\\$gpoId
-gPCUserExtensionNames: [<% @maingpo_user_extensions.each do |extension| %><%= extension %><% end %>]
-
-dn: CN=User,CN=$gpoId,CN=Policies,CN=System,<%= @base_dn %>
-changetype: add
-objectClass: top
-objectClass: container
-
-dn: CN=Machine,CN=$gpoId,CN=Policies,CN=System,<%= @base_dn %>
-changetype: add
-objectClass: top
-objectClass: container
-" > /tmp/add_base_gpo.ldif
-
-ldbmodify -H <%= @private_path %>/sam.ldb /tmp/add_base_gpo.ldif
-rm /tmp/add_base_gpo.ldif
-
-# link main gpo #
-samba-tool gpo setlink OU=<%= @users_ou %>,<%= @base_dn %> $gpoId -Uadministrator --password=$adminPass
-samba-tool ntacl sysvolreset -Uadministrator --password=$adminPass
-
-
 #TO DO
 #######################################
 # add Domain Admins to Print operator #

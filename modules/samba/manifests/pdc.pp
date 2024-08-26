@@ -71,10 +71,9 @@ class samba::pdc (
    $quota_student_hard = $samba::quota_student_hard
    $quota_teacher_soft = $samba::quota_teacher_soft
    $quota_teacher_hard = $samba::quota_teacher_hard
-   $maingpo_name = $samba::maingpo_name
-   $maingpo_id = $samba::maingpo_id
-   $maingpo_version = $samba::maingpo_version
-   $maingpo_user_extensions = $samba::maingpo_user_extensions
+   $gpo_logon_script_name = $samba::gpo_logon_script_name
+   $gpo_logon_script_id = $samba::gpo_logon_script_id
+   $gpo_logon_script_version = $samba::gpo_logon_script_version
 
    ######################
    # samba/bind install #
@@ -108,13 +107,13 @@ class samba::pdc (
    #      notify => Class['samba::dcservice'],
    #   }
    #}
-   if $disable_groups == false {
-      class { 'samba::pam_group' :
-         groups => $default_groups,
-         require => Class['samba::bind_setup'],
-         notify => Class['samba::dcservice'],
-      }
-   }
+   #if $disable_groups == false {
+   #   class { 'samba::pam_group' :
+   #      groups => $default_groups,
+   #      require => Class['samba::bind_setup'],
+   #      notify => Class['samba::dcservice'],
+   #   }
+   #}
    if $account_server == true {
       class { 'samba::accountserver::config':
          domain => $domain,
@@ -187,6 +186,11 @@ class samba::pdc (
    if $rsync_sysvol != true {
       class { 'samba::pdc::postconfig':
          require => Class['samba::dcservice'],
+         before => Anchor['samba::pdc::end'],
+      }
+
+      class { 'samba::pdc::policies':
+         require => Class['samba::pdc::postconfig'],
          before => Anchor['samba::pdc::end'],
       }
    }

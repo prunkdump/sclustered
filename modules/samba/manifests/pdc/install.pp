@@ -12,7 +12,7 @@ class samba::pdc::install {
    #################
 
    # samba packages #
-   package { ['samba','winbind','dnsutils','acl','ntp']:
+   package { ['samba','winbind','dnsutils','acl','ntp','dos2unix']:
       ensure => installed,
    }
 
