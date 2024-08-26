@@ -14,6 +14,8 @@ class samba::params {
    $accountsrv_dns = 'sambaaccount'
    $accountsrv_cron_time = { 'hour' => '23', 'minute' => '00' }
    $print_server = false
+   $spoolss_idle_time = '300'
+   $spoolss_num_workers = '10'
    $sysvolrsyncsrv_dns = 'sysvolrsync' 
    $sysvolrsync_password = 'us@se!sd$ac'
 

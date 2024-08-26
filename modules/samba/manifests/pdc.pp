@@ -8,6 +8,8 @@ class samba::pdc (
    $accountsrv_cron_time = $samba::accountsrv_cron_time,
    $rsync_sysvol = $samba::rsync_sysvol,
    $print_server = $samba::print_server,
+   $spoolss_idle_time = $samba::spoolss_idle_time,
+   $spoolss_num_workers = $samba::spoolss_num_workers,
    $interfaces = $samba::interfaces,
    $default_admin_pass = $samba::default_admin_pass,
    $dns_forwarders = $samba::dns_forwarders,

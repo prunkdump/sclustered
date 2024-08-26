@@ -10,6 +10,8 @@ class samba (
    $accountsrv_dns = $samba::params::accountsrv_dns,
    $accountsrv_cron_time = $samba::params::accountsrv_cron_time,
    $print_server = $samba::params::print_server,
+   $spoolss_idle_time = $samba::params::spoolss_idle_time,
+   $spoolss_num_workers = $samba::params::spoolss_num_workers,
    $sysvolrsyncsrv_dns = $samba::params::sysvolrsyncsrv_dns,
    $sysvolrsync_password = $samba::params::sysvolrsync_password,
    $domain = $samba::params::domain,

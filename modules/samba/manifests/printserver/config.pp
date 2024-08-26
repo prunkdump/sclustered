@@ -1,5 +1,7 @@
 class samba::printserver::config (
-   $etc_path
+   $etc_path,
+   $spoolss_idle_time = '300',
+   $spoolss_num_workers = '10'
 ) {
 
    ######################
@@ -26,14 +28,15 @@ class samba::printserver::config (
    # samba conf #
    ##############
 
-   # enable spoolss #
-   file_option { 'samba_enable_external_spoolss':
+   # since samba 4.16 the spoolss #
+   # forked service is not used anymore. #
+   file_option { 'samba_disable_external_spoolss':
       path => '/etc/samba/smb.conf',
       option => 'rpc_server:spoolss',
       value => 'external',
       after => '\[global\]',
       multiple => false,
-      ensure => present,
+      ensure => absent,
    }
 
    file_option { 'samba_enable_spoolssd':
@@ -42,9 +45,26 @@ class samba::printserver::config (
       value => 'fork',
       after => '\[global\]',
       multiple => false,
+      ensure => absent,
+   }
+
+   file_option { 'samba_spoolss_set_idle_time':
+      path => '/etc/samba/smb.conf',
+      option => 'rpcd_spoolss:idle_seconds',
+      value => $spoolss_idle_time,
+      after => '\[global\]',
+      multiple => false,
       ensure => present,
    }
 
+   file_option { 'samba_spoolss_set_num_workers':
+      path => '/etc/samba/smb.conf',
+      option => 'rpcd_spoolss:num_workers',
+      value => $spoolss_num_workers,
+      after => '\[global\]',
+      multiple => false,
+      ensure => present,
+   }
 
    # load printers #
    file_option { 'samba_load_printers':
