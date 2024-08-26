@@ -23,10 +23,17 @@ class desktop::gnome::install {
       #require => [File['/etc/apt/preferences.d/gnome.pref'],Package['dbus']],
    }
 
+   package { 'gnome-initial-setup':
+      ensure => purged,
+      require => Package['task-gnome-desktop'],
+   }
+
    # gnome extensions #
    package { 'gnome-shell-extensions':
       ensure => installed,
+      require => Package['task-gnome-desktop'],
    }
+
 
    # add logout button extension #
    # now in repository #
