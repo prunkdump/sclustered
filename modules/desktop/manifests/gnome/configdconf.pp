@@ -112,6 +112,17 @@ class desktop::gnome::configdconf {
       require => File['/etc/dconf/db/userbaseconf.d'],
    }
 
+   # file history cause problem with nfs #
+   # because nautilus try to access all  #
+   # recent files at start               #
+   file { '05_disable_file_history.key':
+      path => '/etc/dconf/db/userbaseconf.d/05_disable_file_history.key',
+      ensure => file,
+      mode => '0644',
+      source => 'puppet:///modules/desktop/05_disable_file_history.key',
+      require => File['/etc/dconf/db/userbaseconf.d'],
+   }
+
    # lock it #
    file { 'userbaseconf.lock':
       path => '/etc/dconf/db/userbaseconf.d/locks/userbaseconf.lock',
