@@ -12,7 +12,7 @@ options {
 	// nameservers, you probably want to use them as forwarders.  
 	// Uncomment the following block, and insert the addresses replacing 
 	// the all-0's placeholder.
-
+	forward only;
 	forwarders {
 <% @dns_forwarders.each do |forwarder| -%>
 		<%= forwarder %>;
