@@ -106,6 +106,28 @@ class debbug::client {
                   Exec['gssd-service-daemon-reload']],
    }
 
+   # bug : sometimes nfs cache some nobody/nogroup at boot #
+   # so clear the cache when nfs-client and winbind are started#
+   file { '/lib/systemd/system/idmap-clean.service':
+      ensure => present,
+      source => 'puppet:///modules/debbug/idmap-clean.service',
+      mode => '0644',
+   }
+
+   exec { 'idmap-clean-service-daemon-reload':
+      path => '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+      command => 'systemctl daemon-reload',
+      refreshonly => true,
+      subscribe => File['/lib/systemd/system/idmap-clean.service'],
+   }
+
+   service { 'idmap-clean':
+      enable => true,
+      require => [File['/lib/systemd/system/idmap-clean.service'],
+                  Exec['idmap-clean-service-daemon-reload']],
+   }
+
+
    # nullmailer can fill disk with certain cron scripts #
    service { 'nullmailer':
       ensure => stopped,

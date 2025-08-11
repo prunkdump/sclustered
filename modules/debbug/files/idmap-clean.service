@@ -1,0 +1,10 @@
+[Unit]
+Description=Clean nfs idmap on boot 
+After=network.target nfs-utils.service winbind.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nfsidmap -c
+
+[Install]
+WantedBy=multi-user.target
