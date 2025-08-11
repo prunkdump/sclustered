@@ -28,16 +28,6 @@ class apt::server::config {
    # config #
    ##########
 
-   # server port option #
-   file_option { 'acng_port':
-      path => '/etc/apt-cacher-ng/acng.conf',
-      option => 'Port',
-      value => "$port",
-      separator => ': ',
-      multiple => false,
-      ensure => present,
-   }
-
    # http proxy option #
    file_option { 'acng_http_proxy':
       path => '/etc/apt-cacher-ng/acng.conf',
