@@ -5,6 +5,7 @@ class shutdown (
    $message = $shutdown::params::message
 ) inherits shutdown::params {
 
+   # since suspend shutdown is useless #
    if $hour and $minute {
 
       cron { 'client_daily_shutdown':
@@ -12,7 +13,7 @@ class shutdown (
          user    => root,
          hour    => $hour,
          minute  => $minute,
-         ensure => present,
+         ensure => absent,
       }
 
    } else {
