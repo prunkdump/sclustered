@@ -4,5 +4,13 @@ auto lo
 iface lo inet loopback
 
 <% @disabled_interfaces.each do |dinterface| -%>
+auto <%= dinterface %>
+allow-hotplug <%= dinterface %>
 iface <%= dinterface %> inet static
 <% end -%>
+
+auto <%= @interface %>
+allow-hotplug <%= @interface %>
+iface <%= @interface %> inet dhcp
+   wpa-ssid <%= @ssid %>
+   wpa-psk <%= @psk %>

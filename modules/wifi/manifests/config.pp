@@ -15,11 +15,19 @@ class wifi::config {
       ensure => directory,
    }
 
-   file { "/etc/network/interfaces.d/$interface":
-     ensure => present,
-     content => template('wifi/wifipass.erb'),
-     mode => '0600',
-     require => File['/etc/network/interfaces.d'],
+   # moved to interfaces 
+   # sometime we need to setup wired before wifi
+   #
+   #file { "/etc/network/interfaces.d/$interface":
+   #  ensure => present,
+   #  content => template('wifi/wifipass.erb'),
+   #  mode => '0600',
+   #  require => File['/etc/network/interfaces.d'],
+   #}
+
+   # lo setup is in interface #
+   file { "/etc/network/interfaces.d/lo":
+      ensure => absent,
    }
 
    # some old configuration files may conflict with /etc/network/interfaces #
