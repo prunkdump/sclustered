@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# get target def #
+if [ ! -e "/etc/monitors.conf.def" ]; then
+   echo "Cannot find screen def file !"
+   exit 0
+fi
+
+# check target def #
+defLine=$(head -n 1 /etc/monitors.conf.def)
+if ! $(echo "$defLine" | grep -q '^[[:digit:]]*x[[:digit:]]*$'); then
+   echo "Cannot get target def !"
+   exit 0
+fi
+
+# check user config #
+if [ -e "/etc/monitors.conf.userxml" ] && [ -e "$HOME/.config" ]; then
+   cp /etc/monitors.conf.userxml $HOME/.config/monitors.xml
+fi
+
+# wait #
+sleep 5
+
+# get connected screens #
+while read -r screenDevPath; do
+
+   unset stateFile
+   unset screenState
+   unset fullOutputName
+   unset kernelOutputName
+   unset outputName
+
+   stateFile="${screenDevPath}/status"
+   screenState=$(cat $stateFile)
+
+   # check if the screen is connected #
+   if [ "$screenState" == "connected" ]; then
+
+      # compute output name #
+      fullOutputName=$(basename ${screenDevPath})
+      kernelOutputName=$(echo "$fullOutputName" | sed 's/^card.-//')
+      outputName=$(echo "$kernelOutputName" | sed 's/HDMI-.-\(.\)/HDMI-\1/')
+
+      # add #
+      if [ -z "$connectedScreens" ]; then
+         connectedScreens="$outputName"
+      else
+         connectedScreens="$connectedScreens $outputName"
+      fi
+   fi
+done < <(find /sys/class/drm | grep 'card.-')
+
+
+# build xrandr command #
+xrandrCommand="xrandr "
+
+for outputName in $(echo "$connectedScreens"); do
+   xrandrCommand="$xrandrCommand --output $outputName --pos 0x0 --mode $defLine"
+done
+
+
+# execute #
+eval "$xrandrCommand"

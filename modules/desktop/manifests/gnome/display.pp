@@ -7,7 +7,7 @@ class desktop::gnome::display {
    ################
 
    # restart gdm is not needed #
- 
+
    if $force_mirror { 
 
       # edid reader #
@@ -21,6 +21,12 @@ class desktop::gnome::display {
          source => 'puppet:///modules/desktop/xrandr-verbose',
       }
 
+      file { '/usr/bin/desktop_force_mirror':
+         ensure => file,
+         mode => '0755',
+         source => 'puppet:///modules/desktop/desktop_force_mirror',
+      }
+
       file { 'desktop_gdm_force_mirror':
          path => '/usr/sbin/desktop_gdm_force_mirror',
          ensure => file,
@@ -30,7 +36,7 @@ class desktop::gnome::display {
 
       # used to signal execution of force mirror #
       file { 'desktop_gdm_force_mirror_conf_file':
-         path => '/var/lib/gdm3/.config/monitors.xml.def',
+         path => '/etc/monitors.conf.def',
          ensure => file,
          content => "$force_mirror",
          mode => '0644',
@@ -52,10 +58,17 @@ class desktop::gnome::display {
          require => Exec['desktop_gdm_force_mirror_refresh'],
       }
       
-      # exec /var/lib/gdm3/.config/monitors.xml.sh at logon #
+      # force mirror a second time at logon #
+      include pamexec
+ 
+      pamexec::script { 'copy_monitor_conf':
+         ensure => present,
+         source => 'puppet:///modules/desktop/copy_monitor_conf',
+      }
+ 
       file { '/etc/xdg/autostart/setupxorg.desktop':
          ensure => file,
-         content => "[Desktop Entry]\nType=Application\nName=avertlogon\nExec=/var/lib/gdm3/.config/monitors.xml.sh",
+         content => "[Desktop Entry]\nType=Application\nName=avertlogon\nExec=/usr/bin/desktop_force_mirror",
          mode => '0644',
       }
      
@@ -63,19 +76,23 @@ class desktop::gnome::display {
    } else {
 
       file { '/var/lib/gdm3/.config/monitors.xml':
-         ensure => absent;
+         ensure => absent,
       }
 
       file { '/var/lib/gdm3/.config/monitors.xml.sh':
-         ensure => absent;
+         ensure => absent,
       }
 
-      file { '/var/lib/gdm3/.config/monitors.xml.def':
-         ensure => absent;
+      file { '/etc/monitors.conf.def':
+         ensure => absent,
+      }
+
+      file { '/etc/monitors.conf.userxml':
+         ensure => absent,
       }
 
       file { '/etc/xdg/autostart/setupxorg.desktop':
-         ensure => absent;
+         ensure => absent,
       }
    }
 }

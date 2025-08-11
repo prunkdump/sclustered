@@ -215,7 +215,7 @@ mkdir -p /usr/lib/firmware/edid
 ###########
 # get def #
 ###########
-if [ ! -e /var/lib/gdm3/.config/monitors.xml.def ]; then
+if [ ! -e /etc/monitors.conf.def ]; then
    exit_with_error
 fi
 
@@ -229,7 +229,7 @@ fi
 ###############
 # read config #
 ###############
-defLine=$(head -n 1 /var/lib/gdm3/.config/monitors.xml.def)
+defLine=$(head -n 1 /etc/monitors.conf.def)
 screenWidth=$(echo "$defLine" | cut '-dx' -f1)
 screenHeight=$(echo "$defLine" | cut '-dx' -f2)
 if [ -z "$screenWidth" ] || [ -z "$screenWidth" ]; then
@@ -499,8 +499,8 @@ if [ ! -z "$connectedScreensWithRate" ]; then
 
    # create script #
    echo '#!/bin/bash
-if [ -e "/var/lib/gdm3/.config/monitors.xml.user" ]; then
-   cp /var/lib/gdm3/.config/monitors.xml.user $HOME/.config/monitors.xml
+if [ -e "/etc/monitors.conf.userxml" ]; then
+   cp /etc/monitors.conf.userxml $HOME/.config/monitors.xml
 fi
 sleep 5
 ' > /var/lib/gdm3/.config/monitors.xml.sh
@@ -509,7 +509,7 @@ sleep 5
 
    # echo header #
    echo '<monitors version="2">' > /var/lib/gdm3/.config/monitors.xml
-   echo '<monitors version="2">' > /var/lib/gdm3/.config/monitors.xml.user
+   echo '<monitors version="2">' > /etc/monitors.conf.userxml
 
    #####################################
    # create xrandr order configuration #
@@ -517,7 +517,7 @@ sleep 5
    #screensConf=$(echo -e $connectedScreensWithRate)
    #add_screen_config "$screensConf"
    add_screen_config "/var/lib/gdm3/.config/monitors.xml" "$connectedScreensWithRate"
-   add_screen_config "/var/lib/gdm3/.config/monitors.xml.user" "$connectedScreensWithRate"
+   add_screen_config "/etc/monitors.conf.userxml" "$connectedScreensWithRate"
 
    #############################################
    # create xrandr REVERSE order configuration #
@@ -531,7 +531,7 @@ sleep 5
    # end #
    #######
    echo '</monitors>' >> /var/lib/gdm3/.config/monitors.xml
-   echo '</monitors>' >> /var/lib/gdm3/.config/monitors.xml.user
+   echo '</monitors>' >> /etc/monitors.conf.userxml
 
    # create script #
    echo "$xrandrCommand" >> /var/lib/gdm3/.config/monitors.xml.sh

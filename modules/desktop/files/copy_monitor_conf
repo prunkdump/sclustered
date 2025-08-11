@@ -1,0 +1,6 @@
+#!/bin/bash
+
+if [ -f "/etc/monitors.conf.userxml" ] && [ ! -z "$HOME" ]; then
+   mkdir -p "$HOME/.config"
+   cp "/etc/monitors.conf.userxml" "$HOME/.config/monitors.xml"
+fi
