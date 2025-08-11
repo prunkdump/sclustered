@@ -9,7 +9,7 @@ class wine::client::config {
    if $associate == true and (! empty($apps) or $enabled == true) {
       file { '/usr/share/applications/wine.desktop':
          ensure => present,
-         source => 'file:/usr/share/doc/wine-development/examples/wine.desktop',
+         source => 'file:/usr/share/doc/wine/examples/wine.desktop',
          mode => '0644',
       }
    } else {
