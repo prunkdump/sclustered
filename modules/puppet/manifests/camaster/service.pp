@@ -32,7 +32,8 @@ class puppet::camaster::service {
          password => $puppetcarsync_password,
          src_files => ['/environments','/hieradata','/hiera.yaml','/modules'],
          dest_path => '/etc/puppet',
-         minute => '*/15',
+         minute => '0/5',
+         randomize => '2m',
       }
    }
 

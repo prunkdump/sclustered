@@ -23,7 +23,8 @@ class samba::pdc::sysvolrsync (
          password => $sysvolrsync_password,
          src_files => ['/'],
          dest_path => "${sysvol_path}",
-         minute => '*/15',
+         minute => '0/15',
+         randomize => '5m',
       }
    } 
 

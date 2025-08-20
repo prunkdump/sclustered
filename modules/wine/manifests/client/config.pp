@@ -53,7 +53,8 @@ class wine::client::config {
          password => $winersync_password,
          src_files => ['/'],
          dest_path => '/wine',
-         minute => '*/15',
+         minute => '0/30',
+         randomize => '10m',
       }
    }
 
