@@ -207,7 +207,7 @@ class samba::accountserver::config (
 
    # !! useless to update !! #
    # samba will be restarted #
-   if (! $account_redirector) or $hostname == $account_redirector {
+   if (! $account_redirector) or $::hostname == $account_redirector {
 
       samba::srvregister { $accountsrv_dns:
          ensure => present,
