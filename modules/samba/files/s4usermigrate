@@ -564,12 +564,14 @@ while read -r migrateUserInfo; do
    # update account #
    ##################
 
+   # ! profile path is currently disabled as we moved to folder redirection ! #
+   # replace: profilePath
+   # profilePath: \\\\${targetServer}\\${profileShare}\\${userName}
+
    echo "dn: $userDN
 changetype: modify
 replace: homeDirectory
 homeDirectory: \\\\${targetServer}\\${homeShare}\\${userName}
-replace: profilePath
-profilePath: \\\\${targetServer}\\${profileShare}\\${userName}
 replace: unixHomeDirectory
 unixHomeDirectory: /dnfs/${homeShare}/${targetServer}/$userName" > /tmp/$userName
 

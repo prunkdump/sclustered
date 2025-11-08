@@ -131,8 +131,9 @@ userGid=$(echo "$strgid" | cut -f2)
 echo "Creating s4 posix user $userName"
 
 # create the user #
+# ! profile path is currently disabled as we moved to folder redirection ! #
+# --profile-path="\\\\${userServer}\\${profileShare}\\${userName}" \
 samba-tool user create $userName --userou=$userClassDN --random-password \
---profile-path="\\\\${userServer}\\${profileShare}\\${userName}" \
 --home-directory="\\\\${userServer}\\${homeShare}\\${userName}" \
 --home-drive="$homeDrive" \
 --nis-domain=${shortDomain,,} \
