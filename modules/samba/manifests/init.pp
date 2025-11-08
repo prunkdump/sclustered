@@ -72,7 +72,16 @@ class samba (
    $quota_teacher_hard = $samba::params::quota_teacher_hard,
    $gpo_logon_script_name = $samba::params::gpo_logon_script_name,
    $gpo_logon_script_id = $samba::params::gpo_logon_script_id,
-   $gpo_logon_script_version = $samba::params::gpo_logon_script_version
+   $gpo_logon_script_version = $samba::params::gpo_logon_script_version,
+   $gpo_logon_scriptsync_name = $samba::params::gpo_logon_scriptsync_name,
+   $gpo_logon_scriptsync_id = $samba::params::gpo_logon_scriptsync_id,
+   $gpo_logon_scriptsync_version = $samba::params::gpo_logon_scriptsync_version,
+   $gpo_folder_redirection_name = $samba::params::gpo_folder_redirection_name,
+   $gpo_folder_redirection_id = $samba::params::gpo_folder_redirection_id,
+   $gpo_folder_redirection_version = $samba::params::gpo_folder_redirection_version,
+   $gpo_proxy_settings_name = $samba::params::gpo_proxy_settings_name,
+   $gpo_proxy_settings_id = $samba::params::gpo_proxy_settings_id,
+   $gpo_proxy_settings_version = $samba::params::gpo_proxy_settings_version
 
 ) inherits samba::params {
 

@@ -76,6 +76,15 @@ class samba::pdc (
    $gpo_logon_script_name = $samba::gpo_logon_script_name
    $gpo_logon_script_id = $samba::gpo_logon_script_id
    $gpo_logon_script_version = $samba::gpo_logon_script_version
+   $gpo_logon_scriptsync_name = $samba::gpo_logon_scriptsync_name
+   $gpo_logon_scriptsync_id = $samba::gpo_logon_scriptsync_id
+   $gpo_logon_scriptsync_version = $samba::gpo_logon_scriptsync_version
+   $gpo_folder_redirection_name = $samba::gpo_folder_redirection_name
+   $gpo_folder_redirection_id = $samba::gpo_folder_redirection_id
+   $gpo_folder_redirection_version = $samba::gpo_folder_redirection_version
+   $gpo_proxy_settings_name = $samba::gpo_proxy_settings_name
+   $gpo_proxy_settings_id = $samba::gpo_proxy_settings_id
+   $gpo_proxy_settings_version = $samba::gpo_proxy_settings_version
 
    ######################
    # samba/bind install #

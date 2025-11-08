@@ -685,6 +685,14 @@ while( my $userInfoLine = <$ldbCall> ) {
    # create user dirs #
    ####################
 
+   # make home dfs link #
+   # the only way to update a link is to create it again #
+   touchDir("$dfsPath/$homeShare");
+   if( -l "$dfsPath/$homeShare/$userName" ) {
+      unlink("$dfsPath/$homeShare/$userName");
+   }
+   symlink("msdfs:$userServer\\$homeShare\\$userName", "$dfsPath/$homeShare/$userName");
+
    # make class share directories #
    touchDir("/srv/nfs4/$shareShare/$userClassGroup");
    touchDir("$dfsPath/$userClassGroup");

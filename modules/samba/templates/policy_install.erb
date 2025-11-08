@@ -9,10 +9,10 @@ versionNumber: <%= @version %>
 gPCFunctionalityVersion: 2
 gPCFileSysPath: \\<%= @domain %>\sysvol\<%= @domain %>\Policies\{<%= @id %>}
 <% if ! @user_extensions.empty? -%>
-gPCUserExtensionNames: [<% @user_extensions.each do |extension| %>{<%= extension %>}<% end %>]
+gPCUserExtensionNames: <% @user_extensions.each_with_index do |extension, idx| %><% if idx%2 == 0 %>[{<%= extension %>}<% else %>{<%= extension %>}]<% end%><% end %>
 <% end -%>
 <% if ! @machine_extensions.empty? -%>
-gPCMachineExtensionNames: [<% @machine_extensions.each do |extension| %>{<%= extension %>}<% end %>]
+gPCMachineExtensionNames: <% @Machine_extensions.each_with_index do |extension, idx| %><% if idx%2 == 0 %>[{<%= extension %>}<% else %>{<%= extension %>}]<% end%><% end %>
 <% end -%>
 
 dn: CN=User,CN={<%= @id %>},CN=Policies,CN=System,<%= @base_dn %>

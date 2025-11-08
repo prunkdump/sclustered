@@ -38,23 +38,6 @@ wshNetwork.MapNetworkDrive commonDrive, commonPath
 Set objShella = CreateObject("Shell.Application")
 objShella.NameSpace(commonDrive).Self.name = commonFolderName
 
-'---------------'
-'redirect object'
-'---------------'
-dim objShell, redirectKeys
-Set objShell = WScript.CreateObject("WScript.Shell")
-redirectKeys = "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
-
-'---------------'
-'set redirection'
-'---------------'
-objShell.RegWrite redirectKeys & "\Personal", homeShare , "REG_EXPAND_SZ"
-objShell.RegWrite redirectKeys & "\Desktop", homeShare & "\Bureau", "REG_EXPAND_SZ"
-objShell.RegWrite redirectKeys & "\My Music", homeShare & "\Musique", "REG_EXPAND_SZ"
-objShell.RegWrite redirectKeys & "\My Pictures", homeShare & "\Images", "REG_EXPAND_SZ"
-objShell.RegWrite redirectKeys & "\My Video", homeShare & "\Vidéos", "REG_EXPAND_SZ"
-objShell.RegWrite redirectKeys & "\{374DE290-123F-4565-9164-39C4925E467B}", homeShare & "\Téléchargements", "REG_EXPAND_SZ"
-
 '---------------------------'
 ' create redirected folders '
 '---------------------------'

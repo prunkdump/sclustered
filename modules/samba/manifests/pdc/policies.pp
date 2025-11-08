@@ -1,10 +1,16 @@
 define samba::pdc::policies::policy::file ( $filepath = $title,
                                             $id,
+                                            $version = undef,
+                                            $policy_name = undef,
                                             $params ) {
 
 
    # keep vars #
    $accountsrv_dns = $samba::pdc::accountsrv_dns
+   $home_share = $samba::pdc::home_share
+
+   $http_enabled_proxy = $samba::pdc::policies::http_enabled_proxy
+   $selected_account_redirector = $samba::pdc::policies::selected_account_redirector
    $sysvol_path = $samba::pdc::policies::sysvol_path
    $private_path = $samba::pdc::policies::private_path
    $base_dn = $samba::pdc::policies::base_dn
@@ -42,7 +48,7 @@ define samba::pdc::policies::policy::file ( $filepath = $title,
       file { $absolute_file_path:
          ensure => file,
          source => "puppet:///modules/samba/$source",
-         mode => '0644',
+         mode => '0770',
       }
 
    } else {
@@ -51,7 +57,7 @@ define samba::pdc::policies::policy::file ( $filepath = $title,
       file { $absolute_src_file_path:
          ensure => file,
          content => template("samba/$source"),
-         mode => '0644',
+         mode => '0770',
       }
 
       # change encoding #
@@ -74,6 +80,10 @@ define samba::pdc::policies::policy( $id,
 
    # keep vars #
    $accountsrv_dns = $samba::pdc::accountsrv_dns
+   $home_share = $samba::pdc::home_share
+
+   $http_enabled_proxy = $samba::pdc::policies::http_enabled_proxy
+   $selected_account_redirector = $samba::pdc::policies::selected_account_redirector
    $sysvol_path = $samba::pdc::policies::sysvol_path
    $private_path = $samba::pdc::policies::private_path
    $default_admin_pass = $samba::pdc::policies::default_admin_pass
@@ -114,6 +124,16 @@ define samba::pdc::policies::policy( $id,
       require => File[$base_path],
    }
 
+   # create GPT.INI #
+   samba::pdc::policies::policy::file { "$base_path/GPT.INI":
+      filepath => "GPT.INI",
+      id => $id,
+      version => $version,
+      policy_name => $name,
+      params => { 'GPT.INI' => { source => 'GPT.INI.erb', encoding => 'CP1252' } },
+      require => File[$directories_path],
+   }
+
    # create files #
    samba::pdc::policies::policy::file { keys($files):
       id => $id,
@@ -125,7 +145,7 @@ define samba::pdc::policies::policy( $id,
    file { "$base_path/setup.ldif":
       ensure => file,
       content => template("samba/policy_install.erb"),
-      mode => '0644',
+      mode => '0770',
    }
 
    # install gpo #
@@ -147,12 +167,47 @@ define samba::pdc::policies::policy( $id,
 
 class samba::pdc::policies {
 
+   # check account redirector #
+   $account_redirector = $samba::pdc::account_redirector
+
+   if ! $account_redirector {
+      $selected_account_redirector = $::hostname
+   } else {
+      $selected_account_redirector = $account_redirector
+   }
+
+   # check proxy #
+   include network
+
+   $http_proxy = $::network::http_proxy
+   $https_proxy = $::network::https_proxy
+
+   if $http_proxy {
+      $http_enabled_proxy = $http_proxy
+   } elsif $https_proxy {
+      $http_enabled_proxy = $https_proxy
+   } else {
+      $http_enabled_proxy = undef
+   }
+
    $accountsrv_dns = $samba::pdc::accountsrv_dns
+   $home_share = $samba::pdc::home_share
    $sysvol_path = $samba::pdc::sysvol_path
    $private_path = $samba::pdc::private_path
    $gpo_logon_script_name = $samba::pdc::gpo_logon_script_name
    $gpo_logon_script_id = $samba::pdc::gpo_logon_script_id
    $gpo_logon_script_version = $samba::pdc::gpo_logon_script_version
+   $gpo_logon_scriptsync_name = $samba::pdc::gpo_logon_scriptsync_name
+   $gpo_logon_scriptsync_id = $samba::pdc::gpo_logon_scriptsync_id
+   $gpo_logon_scriptsync_version = $samba::pdc::gpo_logon_scriptsync_version
+   $gpo_folder_redirection_name = $samba::pdc::gpo_folder_redirection_name
+   $gpo_folder_redirection_id = $samba::pdc::gpo_folder_redirection_id
+   $gpo_folder_redirection_version = $samba::pdc::gpo_folder_redirection_version
+   $gpo_proxy_settings_name = $samba::pdc::gpo_proxy_settings_name
+   $gpo_proxy_settings_id = $samba::pdc::gpo_proxy_settings_id
+   $gpo_proxy_settings_version = $samba::pdc::gpo_proxy_settings_version
+
+
    $default_admin_pass = $samba::pdc::default_admin_pass
    $base_dn = $samba::pdc::base_dn
    $users_ou = $samba::pdc::users_ou
@@ -200,5 +255,67 @@ class samba::pdc::policies {
        link_target => "OU=$users_ou",
    }
 
+   # logon script sync #
+   samba::pdc::policies::policy { $gpo_logon_scriptsync_name:
+      id => $gpo_logon_scriptsync_id,
+      version => $gpo_logon_scriptsync_version,
+      user_extensions => ['35378EAC-683F-11D2-A89A-00C04FBBCFA2','D02B1F73-3407-48AE-BA88-E8213C6761F1'],
+      machine_extensions => [],
+      directories => ['Machine',
+                      'User',
+                     ],
+      files => { 'User/comment.cmtx' => { source => 'gpo_scriptsync_comment.cmtx',
+                                                 encoding => 'binary'} ,
+                 'User/Registry.pol' => { source => 'gpo_scriptsync_Registry.pol',
+                                                 encoding => 'binary' } ,
+               },
+      link_target => "OU=$users_ou",
+   }
 
+
+   # folder redirection #
+   samba::pdc::policies::policy { $gpo_folder_redirection_name:
+      id => $gpo_folder_redirection_id,
+      version => $gpo_folder_redirection_version,
+      user_extensions => ['25537BA6-77A8-11D2-9B6C-0000F8080861','88E729D6-BDC1-11D1-BD2A-00C04FB9603F'],
+      machine_extensions => [],
+      directories => ['Machine',
+                      'User',
+                      'User/Documents & Settings',
+                      'User/Scripts',
+                      'User/Scripts/Logon',
+                      'User/Scripts/Logoff',
+                     ],
+      files => { 'User/Documents & Settings/fdeploy.ini' => { source => 'gpo_folderredirection_fdeploy.ini.erb',
+                                                              encoding => 'UTF-16' },
+                 'User/Documents & Settings/fdeploy1.ini' => { source => 'gpo_folderredirection_fdeploy1.ini.erb',
+                                                              encoding => 'UTF-16' },
+               },
+      link_target => "OU=$users_ou",
+   }
+
+
+   # proxy #
+   if $http_proxy or $https_proxy {
+
+      samba::pdc::policies::policy { $gpo_proxy_settings_name:
+         id => $gpo_proxy_settings_id,
+         version => $gpo_proxy_settings_version,
+         user_extensions => ['00000000-0000-0000-0000-000000000000','5C935941-A954-4F7C-B507-885941ECE5C4','E47248BA-94CC-49C4-BBB5-9EB7F05183D0','5C935941-A954-4F7C-B507-885941ECE5C4'],
+         machine_extensions => [],
+         directories => ['Machine',
+                         'User',
+                         'User/Preferences',
+                         'User/Preferences/InternetSettings',
+                         'User/Documents & Settings',
+                         'User/Scripts',
+                         'User/Scripts/Logon',
+                         'User/Scripts/Logoff'
+                        ],
+         files => { 'User/Preferences/InternetSettings/InternetSettings.xml' => { source => 'gpo_proxysettings_InternetSettings.xml.erb',
+                                                                                  encoding => 'UTF-8' },
+                  },
+         link_target => "OU=$users_ou",
+      }
+   }
 }

@@ -104,4 +104,14 @@ class samba::params {
    $gpo_logon_script_name = 'logonScript'
    $gpo_logon_script_id = '5D552AD7-B6FC-4D69-989D-D710FB5D9643'
    $gpo_logon_script_version = 262144
+   $gpo_logon_scriptsync_name = 'logonScriptSync'
+   $gpo_logon_scriptsync_id = '115C5F6E-FA85-4CF6-A5B4-B18FC07BD9D6'
+   $gpo_logon_scriptsync_version = 65536
+   $gpo_folder_redirection_name = 'folderRedirection'
+   $gpo_folder_redirection_id = 'A10DD424-C29B-4A34-B5BB-45DAD7A85A3D'
+   $gpo_folder_redirection_version = 458752
+   $gpo_proxy_settings_name = 'proxySettings'
+   $gpo_proxy_settings_id = '0CB0C328-B1A9-4F28-8AAA-DBF735B37ECD'
+   $gpo_proxy_settings_version = 786432
+
 }
